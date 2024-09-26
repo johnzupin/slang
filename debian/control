@@ -1,0 +1,21 @@
+Source: slang
+Section: unknown
+Priority: optional
+Maintainer: John Zupin <johnz@lunarg.com>
+Build-Depends: debhelper-compat (= 12),
+ cmake,
+ python3
+Standards-Version: 4.4.1
+Homepage: https://github.com/shader-slang/slang
+Vcs-Browser: https://github.com/shader-slang/slang
+Vcs-Git: https://github.com/shader-slang/slang
+
+Package: slang
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: <insert up to 60 chars description>
+ Slang is a shading language that makes it easier to
+ build and maintain large shader codebases in a modular
+ and extensible fashion, while also maintaining
+ the highest possible performance on modern GPUs and
+ graphics APIs.
