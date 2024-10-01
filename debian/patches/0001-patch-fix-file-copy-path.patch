@@ -1,0 +1,21 @@
+From: John Zupin <johnz@lunarg.com>
+Date: Tue, 1 Oct 2024 15:42:06 -0600
+Subject: patch: fix file copy path
+
+---
+ CMakeLists.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 38486b6..6750cb1 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -538,7 +538,7 @@ if(SLANG_ENABLE_GFX)
+         INSTALL
+         FOLDER gfx
+     )
+-    set(modules_dest_dir $<TARGET_FILE_DIR:slang-test>)
++    set(modules_dest_dir ${slang_SOURCE_DIR})
+     add_custom_target(
+         copy-gfx-slang-modules
+         COMMAND ${CMAKE_COMMAND} -E make_directory ${modules_dest_dir}
