@@ -2,6 +2,7 @@ From: John Zupin <johnz@lunarg.com>
 Date: Tue, 1 Oct 2024 15:42:06 -0600
 Subject: patch: fix file copy path
 
+This never gets set because bulding and installint tests are off
 ---
  CMakeLists.txt | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
