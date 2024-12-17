@@ -1,0 +1,21 @@
+From: John Zupin <johnz@lunarg.com>
+Date: Tue, 17 Dec 2024 16:39:39 -0700
+Subject: patch: fix path to slang tests
+
+---
+ tools/CMakeLists.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/CMakeLists.txt b/tools/CMakeLists.txt
+index dfa19d4..736ddf0 100644
+--- a/tools/CMakeLists.txt
++++ b/tools/CMakeLists.txt
+@@ -157,7 +157,7 @@ if(SLANG_ENABLE_GFX)
+         EXPORT_SET_NAME SlangTargets
+         FOLDER gfx
+     )
+-    set(modules_dest_dir $<TARGET_FILE_DIR:slang-test>)
++    set(modules_dest_dir ${slang_SOURCE_DIR})
+     add_custom_target(
+         copy-gfx-slang-modules
+         COMMAND ${CMAKE_COMMAND} -E make_directory ${modules_dest_dir}
