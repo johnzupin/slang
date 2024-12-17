@@ -4,19 +4,41 @@ Subject: patch: fix file copy path
 
 This never gets set because bulding and installint tests are off
 ---
- CMakeLists.txt | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ CMakeLists.txt | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
 
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 38486b6..6750cb1 100644
+index b6f68b4..6df5da9 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -538,7 +538,7 @@ if(SLANG_ENABLE_GFX)
-         INSTALL
-         FOLDER gfx
+@@ -342,18 +342,18 @@ set(CPACK_COMPONENTS_ALL_IN_ONE_PACKAGE ON)
+ set(CPACK_STRIP_FILES FALSE)
+ install(
+     FILES "${slang_SOURCE_DIR}/README.md" "${slang_SOURCE_DIR}/LICENSE"
+-    DESTINATION .
++    DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/slang
+     COMPONENT metadata
+     EXCLUDE_FROM_ALL
+ )
+ install(
+     DIRECTORY "${slang_SOURCE_DIR}/docs/"
+-    DESTINATION share/doc/slang
++    DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/slang
+     PATTERN ".*" EXCLUDE
+ )
+ install(
+     DIRECTORY "${slang_SOURCE_DIR}/include"
+-    DESTINATION .
++    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/slang/
+     PATTERN ".*" EXCLUDE
+ )
+ 
+@@ -385,7 +385,7 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+         EXPORT SlangTargets
+         FILE ${PROJECT_NAME}Targets.cmake
+         NAMESPACE ${PROJECT_NAME}::
+-        DESTINATION cmake
++        DESTINATION ${CMAKE_INSTALL_LIBDIR}/slang/cmake/
      )
--    set(modules_dest_dir $<TARGET_FILE_DIR:slang-test>)
-+    set(modules_dest_dir ${slang_SOURCE_DIR})
-     add_custom_target(
-         copy-gfx-slang-modules
-         COMMAND ${CMAKE_COMMAND} -E make_directory ${modules_dest_dir}
+ endif()
+ 
