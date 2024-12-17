@@ -4,7 +4,7 @@
 // This file will be parsed and processed by the slang-capability-generator
 // tool during the build process to produce slang-generated-capability-defs.h
 // and slang-generated-capability-defs-impl.h files that constitute the final
-// C++ source of the compiler. New capabilties should be added by editing
+// C++ source of the compiler. New capabilities should be added by editing
 // this file instead of the generated .h files.
 //
 // A capability atom represent a basic unit that characterizes a single code-gen target or
@@ -253,6 +253,10 @@ alias cpp_cuda = cpp | cuda;
 /// CPP, CUDA and SPIRV code-gen targets
 /// [Compound]
 alias cpp_cuda_spirv = cpp | cuda | spirv;
+
+/// CUDA and SPIRV code-gen targets
+/// [Compound]
+alias cuda_spirv = cuda | spirv;
 
 /// CPP, CUDA, GLSL and SPIRV code-gen targets
 /// [Compound]
@@ -522,6 +526,10 @@ def spvAtomicFloat32AddEXT : SPV_EXT_shader_atomic_float_add;
 /// [EXT]
 def spvAtomicFloat16AddEXT : SPV_EXT_shader_atomic_float16_add;
 
+/// Represents the SPIR-V capability for atomic float 64 add operations.
+/// [EXT]
+def spvAtomicFloat64AddEXT : SPV_EXT_shader_atomic_float_add;
+
 /// Represents the SPIR-V capability for 64-bit integer atomics.
 /// [EXT]
 def spvInt64Atomics : _spirv_1_0;
@@ -533,6 +541,10 @@ def spvAtomicFloat32MinMaxEXT : SPV_EXT_shader_atomic_float_min_max;
 /// Represents the SPIR-V capability for atomic float 16 min/max operations.
 /// [EXT]
 def spvAtomicFloat16MinMaxEXT : SPV_EXT_shader_atomic_float_min_max;
+
+/// Represents the SPIR-V capability for atomic float 64 min/max operations.
+/// [EXT]
+def spvAtomicFloat64MinMaxEXT : SPV_EXT_shader_atomic_float_min_max;
 
 /// Represents the SPIR-V capability for 'derivative control' operations.
 /// [EXT]
@@ -1745,11 +1757,11 @@ alias getattributeatvertex = fragment + _sm_6_1 | fragment + GL_EXT_fragment_sha
 alias memorybarrier = sm_5_0_version;
 /// Capabilities required to use sm_4_0 texture operations
 /// [Compound]
-alias texture_sm_4_0 = sm_4_0_version | GL_ARB_sparse_texture_clamp + GL_EXT_texture_query_lod
+alias texture_sm_4_0 = sm_4_0_version
                      ;
 /// Capabilities required to use sm_4_1 texture operations
 /// [Compound]
-alias texture_sm_4_1 = sm_4_1_version | GL_ARB_sparse_texture_clamp + GL_EXT_texture_query_lod
+alias texture_sm_4_1 = sm_4_1_version
                      ;
 /// Capabilities required to use sm_4_1 samplerless texture operations
 /// [Compound]
@@ -1873,7 +1885,7 @@ alias subgroup_arithmetic = GL_KHR_shader_subgroup_arithmetic | _sm_6_0 | _cuda_
 /// Capabilities required to use GLSL-style subgroup operations 'subgroup_shuffle'
 /// [Compound]
 alias subgroup_shuffle = GL_KHR_shader_subgroup_shuffle | _sm_6_0 | _cuda_sm_7_0;
-/// Capabilities required to use GLSL-style subgroup operations 'subgroup_shufle_relative'
+/// Capabilities required to use GLSL-style subgroup operations 'subgroup_shuffle_relative'
 /// [Compound]
 alias subgroup_shufflerelative = GL_KHR_shader_subgroup_shuffle_relative | _sm_6_0 | _cuda_sm_7_0;
 /// Capabilities required to use GLSL-style subgroup operations 'subgroup_clustered'
