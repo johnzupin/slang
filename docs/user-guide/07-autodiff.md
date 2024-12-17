@@ -167,6 +167,9 @@ interface IDifferentiablePtrType
 }
 ```
 
+> #### Note ####
+> Support for `IDifferentiablePtrType` is still experimental. 
+
 Types should not conform to both `IDifferentiablePtrType` and `IDifferentiable`. Such cases will result in a compiler error.
 
 
@@ -268,7 +271,7 @@ struct MyRayDifferential : IDifferentiable
     float3 d_dir;
 }
 ```
-In this case, since all fields in `MyRayDifferential` are differentiable, and the `Differential` of each field is the same as the original type of each field (i.e. `float3.Differential == float3` as defined in built-in library), the compiler will automatically use the type itself as its own `Differential`, making `MyRayDifferential` suitable for use as `Differential` of `MyRay`.
+In this case, since all fields in `MyRayDifferential` are differentiable, and the `Differential` of each field is the same as the original type of each field (i.e. `float3.Differential == float3` as defined in the core module), the compiler will automatically use the type itself as its own `Differential`, making `MyRayDifferential` suitable for use as `Differential` of `MyRay`.
 
 We can also choose to manually implement `IDifferentiable` interface for `MyRayDifferential` as in the following code:
 
@@ -487,7 +490,7 @@ void back_prop(
 
 ## Builtin Differentiable Functions
 
-The following built-in functions are backward differentiable and both their forward-derivative and backward-propagation functions are already defined in the built-in library:
+The following built-in functions are backward differentiable and both their forward-derivative and backward-propagation functions are already defined in the core module:
 
 - Arithmetic functions: `abs`, `max`, `min`, `sqrt`, `rcp`, `rsqrt`, `fma`, `mad`, `fmod`, `frac`, `radians`, `degrees`
 - Interpolation and clamping functions: `lerp`, `smoothstep`, `clamp`, `saturate`
@@ -501,7 +504,7 @@ The following built-in functions are backward differentiable and both their forw
 
 ## Primal Substitute Functions
 
-Sometimes it is desirable to replace a function with another when generating forward or backward derivative propagation code. For example, the following code shows a function that computes the integral of some term by sampling and we want to use a different sampling stragegy when computing the derivatives.
+Sometimes it is desirable to replace a function with another when generating forward or backward derivative propagation code. For example, the following code shows a function that computes the integral of some term by sampling and we want to use a different sampling strategy when computing the derivatives.
 ```csharp
 float myTerm(float x)
 {
@@ -535,7 +538,7 @@ float getSampleForDerivativeComputation(float a, float b)
 
 Here, the `[PrimalSubstituteOf(getSample)]` attributes marks the `getSampleForDerivativeComputation` function as the substitute for `getSample` in derivative propagation functions. When a function has a primal substitute, the compiler will treat all calls to that function as if it is a call to the substitute function when generating derivative code. Note that this only applies to compiler generated derivative function and does not affect user provided derivative functions. If a user provided derivative function calls `getSample`, it will not be replaced by `getSampleForDerivativeComputation` by the compiler.
 
-Similar to `[ForwardDerivative]` and `[ForwardDerivativeOf]` attributes, The `[PrimalSubsitute(substFunc)]` attribute works the other way around: it specifies the primal substitute function of the function being marked.
+Similar to `[ForwardDerivative]` and `[ForwardDerivativeOf]` attributes, The `[PrimalSubstitute(substFunc)]` attribute works the other way around: it specifies the primal substitute function of the function being marked.
 
 Primal substitute can be used as another way to make a function differentiable. A function is considered differentiable if it has a primal substitute that is differentiable. The following code illustrates this mechanism.
 ```csharp
