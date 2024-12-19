@@ -22,11 +22,11 @@ export DH_VERBOSE = 1
 # This is example for Cmake (See https://bugs.debian.org/641051 )
 
 override_dh_auto_configure:
-	dh_auto_configure --    -LAH -DCMAKE_LIBRARY_PATH=$(DEB_HOST_MULTIARCH) \
+	dh_auto_configure --    -DCMAKE_LIBRARY_PATH=$(DEB_HOST_MULTIARCH) \
 				-DSLANG_SLANG_LLVM_FLAVOR="DISABLE" \
 				-DSLANG_ENABLE_EXAMPLES="OFF" \
 				-DSLANG_RHI_HAS_WGPU="OFF" \
 				-DSLANG_RHI_ENABLE_WGPU="OFF" \
 				-DSLANG_ENABLE_TESTS="OFF" \
 				-DENABLE_CTEST="OFF" \
-				-DSLANG_VERSION_FULL="2024.13"
+				-DSLANG_VERSION_FULL="lunarg-ubuntu-noble-package"
