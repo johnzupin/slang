@@ -1,3 +1,751 @@
+slang (2024.17~rc1-1lunarg22.04-1) jammy; urgency=medium
+
+  [ Ellie Hermaszewska ]
+  * Add compile_commands.json to .gitignore (#5169)
+  * Switch sccache action to Mozilla-Actions version (#5189)
+
+  [ Simon Kallweit ]
+  * Update slang-rhi (#5187)
+
+  [ Yong He ]
+  * Add COM API for querying metadata. (#5168)
+
+  [ Jay Kwak ]
+  * Disable the building of slang-llvm when targeting wasm platform (#5196)
+
+  [ Sai Praveen Bangaru ]
+  * Fix diagnostics for [PreferRecompute] (#5159)
+
+  [ Jay Kwak ]
+  * Enable debug log for VK CTS workflow (#5197)
+
+  [ Ellie Hermaszewska ]
+  * SizeOfLikeExpr has type int (#5205)
+
+  [ Yong He ]
+  * Fix crash when compiling associatedtypes with generic interface constraints. (#5200)
+
+  [ Jay Kwak ]
+  * Fix the broken CI (#5216)
+  * Add path to bash to GITHUB_PATH (#5217)
+  * Checkout LLVM as a workflow action rather than git-clone command (#5202)
+
+  [ Sai Praveen Bangaru ]
+  * Support custom derivatives of member functions of differentiable types (#5124)
+
+  [ Tobias Frisch ]
+  * Allow building using external dependencies (#5076)
+
+  [ cheneym2 ]
+  * Add interfaces for retrieving separate linkable downstream binaries (#5128)
+
+  [ Simon Kallweit ]
+  * update slang-rhi (#5208)
+
+  [ kaizhangNV ]
+  * Refactor the code for synthesizing the body of constructor (#5231)
+
+  [ Anders Leino ]
+  * Add WGSL support for slang-test (#5174)
+
+  [ Simon Kallweit ]
+  * update slang-rhi (#5234)
+
+  [ Anders Leino ]
+  * WGSL emitter: Specify private address space for global non-handle variable declarations (#5236)
+
+  [ Ellie Hermaszewska ]
+  * Look through attributes and rates when determining by reference initialization (#5023)
+
+  [ Yong He ]
+  * Overhaul docgen tool and setup CI to generate stdlib reference. (#5232)
+
+  [ James0124 ]
+  * Fix build for clang-14 (#5235)
+
+  [ Yong He ]
+  * Fix bug related to findAndCheckEntrypoint. (#5241)
+  * Fix spirv lowering logic around pointer to unsized array. (#5243)
+
+  [ Dynamitos ]
+  * Metal: Texture write fix (#4952)
+
+  [ cheneym2 ]
+  * Fix precompiled glsl modules (#5230)
+
+  [ Yong He ]
+  * Use user defined type name in glsl buffer declarations. (#5242)
+  * Support constant folding for static array access. (#5248)
+  * reword documentation around precompiled modules. (#5249)
+  * Update README.md
+  * Fix links in stdlib reference category landing page. (#5250)
+  * slang-test: retry failed test at the end. (#5255)
+  * README: mention VulkanSDK in getting started. (#5256)
+
+  [ Anders Leino ]
+  * WGSL: Enable load & store from byte-addressible buffers (#5252)
+  * Add slang-wasm target (#5237)
+
+  [ Ellie Hermaszewska ]
+  * Restrict stdlib embed macros to single source file (#5251)
+  * beautify the readme support table (#5265)
+  * Fix race condition for building stdlib headers (#5272)
+
+  [ Yong He ]
+  * Write out summary of documentation in docgen tool. (#5266)
+  * Fix assert when compiling an entrypoint that calls another entrypoint. (#5268)
+
+  [ Ellie Hermaszewska ]
+  * Fix release build failure (#5285)
+
+  [ Yong He ]
+  * Misc build fixes. (#5271)
+
+  [ cupofc0t ]
+  * Fix unexported spReflectionEntryPoint_GetFunction (#5260)
+
+  [ Ellie Hermaszewska ]
+  * Lower minimum CMake version to 3.22 (#5295)
+
+  [ Anders Leino ]
+  * Enable WebGPU tests in CI (#5239)
+
+  [ Ellie Hermaszewska ]
+  *  Move C interface from slang.h to slang-deprecated.h (#5301)
+  * review and revise building instructions (#5302)
+
+  [ Yong He ]
+  * Add stdlib documentation for attributes and interfaces. (#5297)
+
+  [ Ellie Hermaszewska ]
+  * Squash redundant move warnings (#5300)
+
+  [ Yong He ]
+  * Fix type checking on generic extensions. (#5316)
+  * Add docgen documentation. (#5318)
+  * Fix spirv debug info for pointer types. (#5319)
+  * Fix entrypoint naming in glsl backend. (#5320)
+
+  [ Jay Kwak ]
+  * Fix D3D12Core.dll loading problem (#5315)
+
+  [ Simon Kallweit ]
+  * update slang-rhi (#5258)
+
+  [ kaizhangNV ]
+  * Add 'findAndCheckEntryPoint' to wasm binding (#5337)
+
+  [ Yong He ]
+  * Cleanup atomic intrinsics. (#5324)
+  * Cleanup definition of `printf`. (#5330)
+
+  [ Ellie Hermaszewska ]
+  * Remove sccache (#5206)
+
+  [ Yong He ]
+  * Use `VariablePointersStorageBuffer` instead of `VariablePointer` spv … (#5340)
+
+  [ Simon Kallweit ]
+  * Update slang-rhi (#5345)
+
+  [ Ellie Hermaszewska ]
+  * Make slang-llvm fetching and failure more robust (#5346)
+
+  [ Yong He ]
+  * Remove use of Variable Pointer capability. (#5352)
+  * Properly check switch case. (#5341)
+  * Mark SPIRV artifact as non-executable. (#5356)
+
+  [ ccummingsNV ]
+  * Fix incorrect setting of array information for 1d texture arrays in D3D12 (#5361)
+  * Fix UAV access for 3d texture mips (#5363)
+
+  [ Yong He ]
+  * Add more doc for builtin interfaces. (#5357)
+
+  [ Ellie Hermaszewska ]
+  * Stdlib documentation for Atomic, Optional, Tuple (#5358)
+
+  [ Yong He ]
+  * Fix  spirv codegen for pointer to empty structs. (#5355)
+
+  [ Jay Kwak ]
+  * Recognize a new spirv header json grammar keyword "aliases" (#5367)
+  * Update the document, `update_spirv.md` (#5368)
+  * Update update_spirv.md
+
+  [ cheneym2 ]
+  * Document derivative core module functions (#5369)
+  * Document bit operations (#5373)
+
+  [ Jay Kwak ]
+  * Document the interfaces in the core module (#5374)
+
+  [ Sai Praveen Bangaru ]
+  * Fix several bugs with `specializeWithArgTypes()` (#5365)
+
+  [ cheneym2 ]
+  * Fix a few documentation typos (#5396)
+
+  [ Ellie Hermaszewska ]
+  * declutter top level CMakeLists.txt (#5391)
+
+  [ Yong He ]
+  * Fix language server crash. (#5395)
+
+  [ kaizhangNV ]
+  * wasm: Add compile target option when creating slang session (#5403)
+
+  [ Yong He ]
+  * Use DebugDeclare instead of DebugValue. (#5404)
+
+  [ cheneym2 ]
+  * Describe experimental COM interfaces (#5397)
+
+  [ Yong He ]
+  * Fix incorrect debug assert in `getLanguagePrelude`. (#5402)
+
+  [ Ellie Hermaszewska ]
+  * Switch back to fetching upstream llvm project (#5408)
+
+  [ Jay Kwak ]
+  * Replace stdlib on Slang API with CoreModule (#5405)
+  * Replace stdlib with core-module on files and projects (#5411)
+
+  [ Ellie Hermaszewska ]
+  * Actions workflow to format code on command (#5400)
+  * Use github token for formatting command dispatch (#5418)
+
+  [ Jay Kwak ]
+  * Swap the term StdLib with Core-Module or Standard-Module in documents (#5414)
+
+  [ Yong He ]
+  * Add `InterlockedAddF64` intrinsic. (#5412)
+  * Add implicit cast for generic vector types. (#5413)
+  * Export language server to wasm. (#5419)
+  * Update README.md
+  * Update README.md
+  * More wasm binding for playground. (#5420)
+
+  [ kaizhangNV ]
+  * Add documentation for buffer types (#5410)
+
+  [ Sai Praveen Bangaru ]
+  * Assorted auto-diff enhancements for increased performance & more streamlined auto-diff results (#5394)
+
+  [ Jay Kwak ]
+  * Rename a directory `source/slang-stdlib` to slang-core-module (#5417)
+  * Replace the word stdlib or standard-library with core-module for source code (#5415)
+
+  [ Ellie Hermaszewska ]
+  * Improvements to formatting bot (#5421)
+  * Correct URL in auto-format PR body (#5427)
+  * format cmake files (#5406)
+  * Check formatting in CI (#5409)
+  * preparation for clang format (#5422)
+  * format
+
+  [ Jay Kwak ]
+  * Use Offset instead of ConstOffset for GLSL function textureGatherOffset (#5426)
+
+  [ kaizhangNV ]
+  * [wasm]: fix the build error (#5430)
+
+  [ cheneym2 ]
+  * Increase slangc option visibility in docs (#5425)
+
+  [ kaizhangNV ]
+  * fix formatting issue (#5432)
+
+  [ cheneym2 ]
+  * Precompiled SPIR-V import support (#5048)
+
+  [ Ellie Hermaszewska ]
+  * Put debug symbols in releases (#5370)
+  * format yaml and json (#5428)
+  * fix release script (#5459)
+  * Correct formatting (#5457)
+  * Fix vs build (#5452)
+
+  [ Yong He ]
+  * Add google analytics. (#5438)
+  * Add design doc for write-only textures. (#5455)
+  * Write only texture types. (#5454)
+
+  [ Ellie Hermaszewska ]
+  * Find slangc in more places in doc generation script (#5461)
+  * Enhancements to diff script (#5460)
+
+  [ Jay Kwak ]
+  * Constant-fold for the type-casting in switch-case labels (#5436)
+
+  [ Yong He ]
+  * fix javascript error on doc layout. (#5464)
+
+  [ kaizhangNV ]
+  * Add function of getting hash string to wasm binding (#5468)
+
+  [ Yong He ]
+  * Add `lerp` for wgsl. (#5472)
+
+  [ Anders Leino ]
+  * Update Slang-RHI to get recent WGPU fixes (#5467)
+  * Update Slang-RHI again to get more WGPU fixes (#5475)
+  * Enable a few more WGPU tests (#5476)
+
+  [ kaizhangNV ]
+  * Improve on spirv generation compile option (#5479)
+
+  [ Yong He ]
+  * Revert uint<->int implicit cast cost to prefer promotion to unsigned. (#5480)
+  * Allow enum cases to be used in attribute arguments. (#5478)
+
+  [ Ellie Hermaszewska ]
+  * Add codeowners file (#5482)
+
+  [ Yong He ]
+  * Update user-guide top bar nav links. (#5488)
+  * Various WGSL fixes. (#5490)
+
+  [ kaizhangNV ]
+  * Fixing the wrong implementation of some math intrinsic (#5491)
+
+  [ Ellie Hermaszewska ]
+  * Move switch statement bodies to their own lines (#5493)
+
+  [ cheneym2 ]
+  * Update slang-rhi and fix error handling (#5485)
+
+  [ kaizhangNV ]
+  * Fix issue of infinity float literal (#5489)
+  * Fix system semantics of SV_GroupIndex (#5496)
+
+  [ cheneym2 ]
+  * Catch all exceptions in render-test (#5495)
+
+  [ Jay Kwak ]
+  * Legalize the Entry-point for WGSL (#5498)
+
+  [ Anders Leino ]
+  * Make various parameters and return types require specialization when targeting WGSL (#5483)
+
+  [ Yong He ]
+  * [WGSL] Enable arbitrary arrays in uniform buffers. (#5497)
+  * Fix WGSL parameter block binding. (#5500)
+
+  [ Ellie Hermaszewska ]
+  * Document raytracing functions (#5494)
+
+  [ Yong He ]
+  * Fix IntVal unification logic to insert type casts + buffer element lowering regression. (#5508)
+
+  [ Jay Kwak ]
+  * Fix the WGSL error about semantic when a nested struct is inlined (#5506)
+
+  [ Yong He ]
+  * Fix CUDA prelude for makeMatrix (#5509)
+
+  [ kaizhangNV ]
+  * Fix the logic bug in spirv-emit compile option (#5512)
+
+  [ Anders Leino ]
+  * Enable a bunch of WGPU tests (#5513)
+
+  [ cheneym2 ]
+  * Fix user-attribute-lookup wgpu crash (#5510)
+
+  [ Ellie Hermaszewska ]
+  * Correct category label positioning in hlsl.meta.slang (#5515)
+
+  [ cheneym2 ]
+  * Mark -embed-downstream-ir as experimental (#5517)
+
+  [ Ellie Hermaszewska ]
+  * lower permission level for format dispatch (#5523)
+
+  [ cheneym2 ]
+  * Fix EHa flag compiler filtering (#5524)
+
+  [ Sai Praveen Bangaru ]
+  * [WGSL] [WASM] Add reflection endpoints + Fix bit manipulation operations (#5499)
+
+  [ cheneym2 ]
+  * Require GL_EXT_samplerless_texture_functions only if needed (#5527)
+
+  [ Yong He ]
+  * Use automatic coarse grained memory management in wasm binding. (#5528)
+
+  [ Simon Kallweit ]
+  * [slang-rhi] refactor command encoding (#5487)
+
+  [ Anders Leino ]
+  * Transfer offset decorations when legalizing laid-out structs (#5525)
+
+  [ Ellie Hermaszewska ]
+  * Refine codeowners for proposals (#5533)
+  * mention code formatting in contribution guidelines (#5514)
+
+  [ tareksander ]
+  * Reflection compiler option (#5507)
+
+  [ Ellie Hermaszewska ]
+  * Use correct slang source dir for slang-rhi (#5534)
+
+  [ Yong He ]
+  * Add wasm binding to get reflection json. (#5536)
+
+  [ Anders Leino ]
+  * Fix two specialization bugs (#5540)
+
+  [ Yong He ]
+  * Push buffer load to end of access chain. (#5544)
+  * Update CONTRIBUTION.md to clarify merge strategy. (#5546)
+
+  [ Anders Leino ]
+  * Various fixes to enable some WGSL graphics tests (#5548)
+
+  [ Yong He ]
+  * WASM-binding: default to sm_6_6 when targeting hlsl. (#5554)
+
+  [ Sai Praveen Bangaru ]
+  * Fix WGSL emit for '&' and add bindings for thread group size (#5557)
+
+  [ Ellie Hermaszewska ]
+  * Copy headers into build dir at build time (#5547)
+
+  [ Yong He ]
+  * Fix regression caused by defer buffer load. (#5552)
+  * Make `getDependencyFilePath` return most unique identity. (#5553)
+
+  [ Ellie Hermaszewska ]
+  * Correct include dir for libslang (#5539)
+
+  [ Theresa Foley ]
+  * Proposal for a language version directive. (#5555)
+
+  [ Simon Kallweit ]
+  * [slang-rhi] pass encoders (#5559)
+
+  [ Sai Praveen Bangaru ]
+  * Fix issue with raw default constructors in SPIRV emit (#5556)
+
+  [ Anders Leino ]
+  * Insert some casts for WGSL texture attribute queries (#5560)
+
+  [ Yong He ]
+  * Embed core module in wasm build. (#5569)
+
+  [ Sai Praveen Bangaru ]
+  * Add `IDifferentiablePtrType` support for arrays (#5576)
+
+  [ Yong He ]
+  * Remove "GL_EXT_samplerless_texture_functions" from combined sampler functions. (#5585)
+  * Fix specialization constant miscompile in glsl mode. (#5568)
+
+  [ Anders Leino ]
+  * Document WGSL-specific features (#5571)
+  * Implement semantics for WGSL (#5589)
+
+  [ Ellie Hermaszewska ]
+  * Markdown emphasis corrections (#5588)
+  * Metal documentation (#5549)
+
+  [ Yong He ]
+  * LanuageServer: fix signature help param range. (#5593)
+
+  [ cheneym2 ]
+  * Document math core lib functions (#5594)
+
+  [ Yong He ]
+  * Fix wgsl legalization around __ref parameter. (#5597)
+
+  [ Anders Leino ]
+  * WGSL: Support isnan, isinf, etc.. (#5609)
+  * Fix WGPU test by provding TEST_INPUT for outputBuffer (#5611)
+
+  [ cheneym2 ]
+  * Minor core lib doc fixes (#5599)
+
+  [ Anders Leino ]
+  * Enable WGPU texture sampling test (#5617)
+
+  [ Ellie Hermaszewska ]
+  * Add link to metal docs and regen TOC (#5616)
+
+  [ bprb ]
+  * Add Matrix overload for exp10() core lib function (#5620)
+
+  [ cheneym2 ]
+  * Clarify stdlib-docgen example (#5619)
+
+  [ Ellie Hermaszewska ]
+  * Small docs corrections (#5615)
+
+  [ Yong He ]
+  * Add description on write-only textures in wgsl doc.
+
+  [ Sai Praveen Bangaru ]
+  * Change how DeclRef::toText works (#5592)
+
+  [ Anders Leino ]
+  * Refresh of disabled WGPU tests (#5614)
+
+  [ Yong He ]
+  * Add reuse and related files (#5622)
+
+  [ Anders Leino ]
+  * Enable some rendering tests (#5623)
+
+  [ Yong He ]
+  * Add datalayout for constant buffers. (#5608)
+
+  [ Bruce Mitchener ]
+  * ci: Update `actions/checkout` to always use v4 (#5634)
+
+  [ Ica ]
+  * [Docs] Extensions -  better wording for c# equivalent (#5636)
+
+  [ Anders Leino ]
+  * Add explanation for disabled WGPU tests (#5628)
+
+  [ Ica ]
+  * [Docs] Optional<T> - fix small typo on example (#5637)
+
+  [ Kanashimia ]
+  * Enable core module embedding by default in CMake. (#5644)
+
+  [ Ica ]
+  * [Docs] fix spirv dead links on toc.html (#5638)
+
+  [ KoT ]
+  * Fixed type (#5639)
+
+  [ Yong He ]
+  * Don't treat StrcturedBuffer<IFoo> as a specializable param. (#5645)
+
+  [ Bruce Mitchener ]
+  * ci: Use v1.11 of the release-downloader action (#5643)
+
+  [ Sai Praveen Bangaru ]
+  * [AD] Add support for resolving custom derivatives where generic parameters can't be automatically inferred (#5630)
+
+  [ Yuki Nishidate ]
+  * Fix unused struct in  sample shader (#5650)
+
+  [ Ica ]
+  * [Docs] Re-run build_toc and fix dead links (#5647)
+
+  [ Elie Michel ]
+  * Fix broken link in 09-reflection.md (#5655)
+
+  [ Anders Leino ]
+  * wgsl: Fix field semantics even if input struct doesn't need flattening (#5642)
+  * Fix issue where inter-stage parameters without semantics don't get location attributes (#5670)
+  * Support interpolation modifiers for WGSL (#5641)
+
+  [ Sai Praveen Bangaru ]
+  * Fix issue with slang-embed & include ordering (#5680)
+
+  [ Jay Kwak ]
+  * Enable Link-Time-Code-Generation for Release builds (#5678)
+
+  [ Anders Leino ]
+  * wgpu: Enable Metal-like legalization for byte addressible buffers (#5681)
+  * WGSL: Fix issue where swizzle L-values are generated (#5682)
+
+  [ Jay Kwak ]
+  * Document the restrictions for vector size (#5673)
+  * Update workflow YML files for renamed files (#5688)
+
+  [ Anders Leino ]
+  * wgsl: Conditionally enable some tests based on 'half' support (#5694)
+
+  [ Ellie Hermaszewska ]
+  * Sort filenames when generating table of contents (#5659)
+  * Add Table of Contents check to CI, and bot script to regenerate (#5618)
+
+  [ Anders Leino ]
+  * wgsl: signedness mismatch fixes (#5692)
+  * Update Slang-RHI/slang (#5701)
+
+  [ Ellie Hermaszewska ]
+  * Make ToC regeneration script path handling more robust (#5700)
+  * Add missing WGSL intrinsics to test (#5663)
+
+  [ Bruce Mitchener ]
+  * docs: Reduce typo count (#5671)
+
+  [ Jay Kwak ]
+  * Fix markdown mistakes on user guide (#5672)
+  * Support nonuniformEXT for GLSL (#5695)
+
+  [ Anders Leino ]
+  * Explain why tests/autodiff/diff-ptr-type-array.slang is disabled for WGPU (#5702)
+
+  [ Jay Kwak ]
+  * Emit OpExecutionMode SpacingEqual for Domain stage (#5696)
+
+  [ Ellie Hermaszewska ]
+  * fetch and extract prebuilt deps lazily (#5707)
+
+  [ Sai Praveen Bangaru ]
+  * [Docs] Minor fixes to auto-diff documentation (#5621)
+
+  [ Anders Leino ]
+  * Add WebGPU target doc (#5708)
+
+  [ Sai Praveen Bangaru ]
+  * Add `OpPrintf` to non-differentiable insts list (#5718)
+
+  [ Ica ]
+  * [Docs] Fix dead links when subsection title have underscore (#5662)
+
+  [ Ellie Hermaszewska ]
+  * Varying inputs and outputs for wgsl (#5669)
+
+  [ Lauro Oyen ]
+  * Move c++ parsing code from slang-cpp-extractor to static library (#5675)
+
+  [ Bruce Mitchener ]
+  * includes: Reduce typo count (#5710)
+  * Fix typo in capdef file (#5711)
+
+  [ Ellie Hermaszewska ]
+  * Install PDB files when available (#5665)
+
+  [ ov-l ]
+  * Add SlangConfig.cmake with slang build targets (#5674)
+
+  [ cheneym2 ]
+  * Core lib Metal math function fixes (#5738)
+
+  [ Darren Wihandi ]
+  * Conform non-suffixed integer literals (#5717)
+
+  [ Sai Praveen Bangaru ]
+  * Remove dump-intermediates flag (#5729)
+
+  [ Yong He ]
+  * Add intrinsics for aligned load/store. (#5736)
+
+  [ Ellie Hermaszewska ]
+  * Remove .clang-format from .gitignore (#5746)
+  * Run a do-nothing CI job for documentation changes (#5747)
+
+  [ Yong He ]
+  * Add emit logic for `requirePrelude` inst. (#5735)
+  * Fix `SpvExecutionModeOutputLinesEXT`. (#5740)
+
+  [ Anders Leino ]
+  * WGPU: Add new test and explanation for disabled test (#5731)
+
+  [ kaizhangNV ]
+  * Fix a regression that GL_EXT_samplerless_texture_functions is missing (#5758)
+  * Relocate the step of 'Add bash to PATH' (#5759)
+
+  [ Yong He ]
+  * Make fvk-invert-y work on mesh shader ouptuts. (#5760)
+
+  [ Kevin Shanahan ]
+  * Fix compiler warning when using slang.h with gcc/clang on Windows (#5766)
+
+  [ Ellie Hermaszewska ]
+  * Don't install .clang-format alongside headers (#5762)
+  * Remove duplicate call to install() for libslang (#5767)
+  * Set prerelease and draft correctly for releases with draft in the tag (#5763)
+  * Set prerelease and draft correctly for centos releases (#5769)
+  * Extended vector proposal (#5734)
+
+  [ Devon ]
+  * Add wgsl missing float image format inference (#5716)
+
+  [ Simon Kallweit ]
+  * Add API for getting last internal error message (#5772)
+
+  [ Darren Wihandi ]
+  * Do recursive function checks early during IR linking (#5777)
+
+  [ Yong He ]
+  * Implement explciit binding for metal and wgsl. (#5778)
+
+  [ Ellie Hermaszewska ]
+  * Split debug info for all targets (#5732)
+
+  [ Yong He ]
+  * Support specialization constant on WGSL and Metal. (#5780)
+
+  [ Ellie Hermaszewska ]
+  * Emit debug info for Release builds (#5783)
+
+  [ Sai Praveen Bangaru ]
+  * Update slang-ast-decl-ref.cpp (#5786)
+
+  [ Yong He ]
+  * Add Sampler*Shadow type aliases. (#5789)
+  * Fix crash on recursive types. (#5796)
+  * Report error on nested functions. (#5792)
+  * Fix reflection for pointer element types. (#5797)
+  * Fix crash during emitCast of attributed type, allow MaxIters to take linktime const. (#5791)
+  * Allow pointers to existential values. (#5793)
+  * Fix pointer offset logic and add executable tests. (#5790)
+  * Add SV_DrawIndex. (#5787)
+  * Fix parsing logic of for loops' initial statement. (#5813)
+  * Don't emit a warning when implicit casting from known in-range int lit to half. (#5814)
+  * Fix a crash when search for files. (#5818)
+  * Create scope for synthesized property decl. (#5817)
+
+  [ Jay Kwak ]
+  * Add more details on PR process to CONTRIBUTING.md (#5812)
+
+  [ Darren ]
+  * Enable exprs for GLSL binding layout qualifiers (#5807)
+
+  [ Ellie Hermaszewska ]
+  * Correct proposal number (#5809)
+
+  [ Jay Kwak ]
+  * Enable WGSL tests that works for Metal related to Semantics (#5816)
+
+  [ HappyLi3 ]
+  * A small mistake. (#5819)
+
+  [ Devon ]
+  * Fix wgsl float texture format inference silent failure (#5831)
+
+  [ Yong He ]
+  * Fix anyvalue marshalling for matrix and 64 bit types. (#5827)
+
+  [ Jay Kwak ]
+  * Update SPIRV submodules (#5815)
+
+  [ Yong He ]
+  * Fix attribute reflection. (#5823)
+  * Fix loop hoisting logic in redundancy pass. (#5836)
+  * Fix the logic to determine whether lower generic pass should run. (#5837)
+
+  [ Jay Kwak ]
+  * Use perfect forwardnig to preserve the parameters for log (#5841)
+
+  [ Yong He ]
+  * LSP: fix "documentSymbol failed" error. (#5842)
+
+  [ Ellie Hermaszewska ]
+  * Bump spirv-header/tools/glslang (#5834)
+
+  [ Yong He ]
+  * Fix language server check skipping when explicit module decl exists. (#5845)
+
+  [ John Zupin ]
+  * packaging: debian: update copyright
+  * packaging: patches: updates
+  * packaging: patches: updates
+  * packaging: debian: update build deps
+  * packaging: debian: define slang version as lunarg-ubuntu-jammy-package
+  * packaging: debian: update patches
+  * packaging: debian: update patches
+
+ -- john <john@odin>  Mon, 06 Jan 2025 17:30:56 -0700
+
 slang (2024.13~rc2-1lunarg22.04-1) jammy; urgency=medium
 
   [ John Zupin ]
