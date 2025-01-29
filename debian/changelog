@@ -1,3 +1,10 @@
+slang (2024.17+1~rc2-1lunarg22.04-1) jammy; urgency=medium
+
+  [ John Zupin ]
+  * packaging: debian: patch where include files get installed to
+
+ -- john <john@odin>  Wed, 29 Jan 2025 16:12:08 -0700
+
 slang (2024.17+1~rc1-1lunarg22.04-1) jammy; urgency=medium
 
   [ cheneym2 ]
