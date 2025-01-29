@@ -1,3 +1,14 @@
+slang (2024.17+1~rc1-1lunarg22.04-1) jammy; urgency=medium
+
+  [ cheneym2 ]
+  * Merge/vsdk 1.4.304 (#6199)
+
+  [ John Zupin ]
+  * packaging: debian: rebase patches
+  * packaging: debian: update rules to exclude CUDA tests
+
+ -- john <john@odin>  Wed, 29 Jan 2025 10:33:18 -0700
+
 slang (2024.17~rc1-1lunarg22.04-1) jammy; urgency=medium
 
   [ Ellie Hermaszewska ]
