@@ -1,3 +1,10 @@
+slang (2024.17+1~rc2-1lunarg24.04-1) noble; urgency=medium
+
+  [ John Zupin ]
+  * packaging: debian: patch where include files get installed to
+
+ -- john <john@odin>  Wed, 29 Jan 2025 16:25:55 -0700
+
 slang (2024.17+1~rc1-1lunarg24.04-1) noble; urgency=medium
 
   [ cheneym2 ]
