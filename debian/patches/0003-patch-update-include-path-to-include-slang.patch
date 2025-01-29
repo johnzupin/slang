@@ -1,0 +1,23 @@
+From: John Zupin <johnz@lunarg.com>
+Date: Wed, 29 Jan 2025 16:09:46 -0700
+Subject: patch: update include path to include/slang
+
+---
+ CMakeLists.txt | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 30fb271..a89afcb 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -356,8 +356,8 @@ install(
+     PATTERN ".*" EXCLUDE
+ )
+ install(
+-    DIRECTORY "${slang_SOURCE_DIR}/include"
+-    DESTINATION .
++    DIRECTORY "${slang_SOURCE_DIR}/include/"
++    DESTINATION include/slang
+     PATTERN ".*" EXCLUDE
+ )
+ 

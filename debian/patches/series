@@ -1,2 +1,3 @@
 0001-patch-fix-path-to-slang-tests.patch
 0002-patch-update-install-path-of-.cmake-files.patch
+0003-patch-update-include-path-to-include-slang.patch
