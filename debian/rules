@@ -29,4 +29,5 @@ override_dh_auto_configure:
 				-DSLANG_RHI_ENABLE_WGPU="OFF" \
 				-DSLANG_ENABLE_TESTS="OFF" \
 				-DENABLE_CTEST="OFF" \
+				-DSLANG_RHI_ENABLE_CUDA="OFF" \
 				-DSLANG_VERSION_FULL="lunarg-ubuntu-noble-package"
