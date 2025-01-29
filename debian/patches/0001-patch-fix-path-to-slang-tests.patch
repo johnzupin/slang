@@ -7,10 +7,10 @@ Subject: patch: fix path to slang tests
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/tools/CMakeLists.txt b/tools/CMakeLists.txt
-index dfa19d4..736ddf0 100644
+index 1ed8cce..c6018b9 100644
 --- a/tools/CMakeLists.txt
 +++ b/tools/CMakeLists.txt
-@@ -157,7 +157,7 @@ if(SLANG_ENABLE_GFX)
+@@ -158,7 +158,7 @@ if(SLANG_ENABLE_GFX)
          EXPORT_SET_NAME SlangTargets
          FOLDER gfx
      )
