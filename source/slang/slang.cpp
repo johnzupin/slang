@@ -410,6 +410,11 @@ const char* getBuiltinModuleNameStr(slang::BuiltinModuleName name)
     return result;
 }
 
+TypeCheckingCache* Session::getTypeCheckingCache()
+{
+    return static_cast<TypeCheckingCache*>(m_typeCheckingCache.get());
+}
+
 Session::BuiltinModuleInfo Session::getBuiltinModuleInfo(slang::BuiltinModuleName name)
 {
     Session::BuiltinModuleInfo result;
@@ -700,6 +705,7 @@ SlangResult Session::_readBuiltinModule(
             module->setModuleDecl(moduleDecl);
         }
 
+        srcModule.irModule->setName(module->getNameObj());
         module->setIRModule(srcModule.irModule);
 
         // Put in the loaded module map
@@ -803,7 +809,12 @@ Session::createSession(slang::SessionDesc const& inDesc, slang::ISession** outSe
 
     RefPtr<Linkage> linkage = new Linkage(this, astBuilder, getBuiltinLinkage());
 
-    linkage->setMatrixLayoutMode(desc.defaultMatrixLayoutMode);
+    {
+        std::lock_guard<std::mutex> lock(m_typeCheckingCacheMutex);
+        if (m_typeCheckingCache)
+            linkage->m_typeCheckingCache =
+                new TypeCheckingCache(*static_cast<TypeCheckingCache*>(m_typeCheckingCache.get()));
+    }
 
     Int searchPathCount = desc.searchPathCount;
     for (Int ii = 0; ii < searchPathCount; ++ii)
@@ -832,6 +843,10 @@ Session::createSession(slang::SessionDesc const& inDesc, slang::ISession** outSe
 
     linkage->m_optionSet.load(desc.compilerOptionEntryCount, desc.compilerOptionEntries);
 
+    if (!linkage->m_optionSet.hasOption(CompilerOptionName::MatrixLayoutColumn) &&
+        !linkage->m_optionSet.hasOption(CompilerOptionName::MatrixLayoutRow))
+        linkage->setMatrixLayoutMode(desc.defaultMatrixLayoutMode);
+
     {
         const Int targetCount = desc.targetCount;
         const uint8_t* targetDescPtr = reinterpret_cast<const uint8_t*>(desc.targets);
@@ -841,6 +856,16 @@ Session::createSession(slang::SessionDesc const& inDesc, slang::ISession** outSe
             linkage->addTarget(targetDesc);
         }
     }
+
+    // If any target requires debug info, then we will need to enable debug info when lowering to
+    // target-agnostic IR. The target-agnostic IR will only include debug info if the linkage IR
+    // options specify that it should, so make sure the linkage debug info level is greater than or
+    // equal to that of any target.
+    DebugInfoLevel linkageDebugInfoLevel = linkage->m_optionSet.getDebugInfoLevel();
+    for (auto target : linkage->targets)
+        linkageDebugInfoLevel =
+            Math::Max(linkageDebugInfoLevel, target->getOptionSet().getDebugInfoLevel());
+    linkage->m_optionSet.set(CompilerOptionName::DebugInformation, linkageDebugInfoLevel);
 
     *outSession = asExternal(linkage.detach());
     return SLANG_OK;
@@ -1085,17 +1110,19 @@ SLANG_NO_THROW SlangResult SLANG_MCALL Session::parseCommandLineArguments(
     if (outDesc->structureSize < sizeof(slang::SessionDesc))
         return SLANG_E_BUFFER_TOO_SMALL;
     RefPtr<ParsedCommandLineData> outData = new ParsedCommandLineData();
-    SerializedOptionsData optionData;
     RefPtr<EndToEndCompileRequest> tempReq = new EndToEndCompileRequest(this);
     tempReq->processCommandLineArguments(argv, argc);
+    outData->options.setCount(1 + tempReq->getLinkage()->targets.getCount());
+    int optionDataIndex = 0;
+    SerializedOptionsData& optionData = outData->options[optionDataIndex];
+    optionDataIndex++;
     tempReq->getOptionSet().serialize(&optionData);
-    outData->options.add(optionData);
     for (auto target : tempReq->getLinkage()->targets)
     {
         slang::TargetDesc tdesc;
-        SerializedOptionsData targetOptionData;
+        SerializedOptionsData& targetOptionData = outData->options[optionDataIndex];
+        optionDataIndex++;
         tempReq->getTargetOptionSet(target).serialize(&targetOptionData);
-        outData->options.add(targetOptionData);
         tdesc.compilerOptionEntryCount = (uint32_t)targetOptionData.entries.getCount();
         tdesc.compilerOptionEntries = targetOptionData.entries.getBuffer();
         outData->targets.add(tdesc);
@@ -1253,9 +1280,6 @@ Linkage::Linkage(Session* session, ASTBuilder* astBuilder, Linkage* builtinLinka
     , m_astBuilder(astBuilder)
     , m_cmdLineContext(new CommandLineContext())
 {
-    if (builtinLinkage)
-        m_astBuilder->m_cachedNodes = builtinLinkage->getASTBuilder()->m_cachedNodes;
-
     getNamePool()->setRootNamePool(session->getRootNamePool());
 
     m_defaultSourceManager.initialize(session->getBuiltinSourceManager(), nullptr);
@@ -1287,7 +1311,20 @@ ISlangUnknown* Linkage::getInterface(const Guid& guid)
 
 Linkage::~Linkage()
 {
-    destroyTypeCheckingCache();
+    // Upstream type checking cache.
+    if (m_typeCheckingCache)
+    {
+        auto globalSession = getSessionImpl();
+        std::lock_guard<std::mutex> lock(globalSession->m_typeCheckingCacheMutex);
+        if (!globalSession->m_typeCheckingCache ||
+            globalSession->getTypeCheckingCache()->resolvedOperatorOverloadCache.getCount() <
+                getTypeCheckingCache()->resolvedOperatorOverloadCache.getCount())
+        {
+            globalSession->m_typeCheckingCache = m_typeCheckingCache;
+            getTypeCheckingCache()->version++;
+        }
+        destroyTypeCheckingCache();
+    }
 }
 
 SearchDirectoryList& Linkage::getSearchDirectories()
@@ -1308,12 +1345,11 @@ TypeCheckingCache* Linkage::getTypeCheckingCache()
     {
         m_typeCheckingCache = new TypeCheckingCache();
     }
-    return m_typeCheckingCache;
+    return static_cast<TypeCheckingCache*>(m_typeCheckingCache.get());
 }
 
 void Linkage::destroyTypeCheckingCache()
 {
-    delete m_typeCheckingCache;
     m_typeCheckingCache = nullptr;
 }
 
@@ -1337,6 +1373,10 @@ void Linkage::addTarget(slang::TargetDesc const& desc)
     optionSet.setProfile(Profile(desc.profile));
     optionSet.set(CompilerOptionName::LineDirectiveMode, LineDirectiveMode(desc.lineDirectiveMode));
     optionSet.set(CompilerOptionName::GLSLForceScalarLayout, desc.forceGLSLScalarBufferLayout);
+
+    CompilerOptionSet targetOptions;
+    targetOptions.load(desc.compilerOptionEntryCount, desc.compilerOptionEntries);
+    optionSet.overrideWith(targetOptions);
 }
 
 #if 0
@@ -2700,6 +2740,16 @@ Expr* ComponentType::findDeclFromString(String const& name, DiagnosticSink* sink
     return result;
 }
 
+bool isSimpleName(String const& name)
+{
+    for (char c : name)
+    {
+        if (!CharUtil::isAlphaOrDigit(c) && c != '_' && c != '$')
+            return false;
+    }
+    return true;
+}
+
 Expr* ComponentType::findDeclFromStringInType(
     Type* type,
     String const& name,
@@ -2729,8 +2779,19 @@ Expr* ComponentType::findDeclFromStringInType(
 
     SLANG_AST_BUILDER_RAII(linkage->getASTBuilder());
 
-    Expr* expr = linkage->parseTermString(name, scope);
+    Expr* expr = nullptr;
 
+    if (isSimpleName(name))
+    {
+        auto varExpr = astBuilder->create<VarExpr>();
+        varExpr->scope = scope;
+        varExpr->name = getLinkage()->getNamePool()->getName(name);
+        expr = varExpr;
+    }
+    else
+    {
+        expr = linkage->parseTermString(name, scope);
+    }
     SemanticsContext context(linkage->getSemanticsForReflection());
     context = context.allowStaticReferenceToNonStaticMember().withSink(sink);
 
@@ -4045,6 +4106,8 @@ RefPtr<Module> Linkage::loadModuleFromIRBlobImpl(
 
     loadedModulesList.add(resultModule);
     resultModule->setPathInfo(filePathInfo);
+    resultModule->getIRModule()->setName(resultModule->getNameObj());
+
     return resultModule;
 }
 

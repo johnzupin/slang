@@ -60,6 +60,32 @@ void HLSLSourceEmitter::_emitHLSLDecorationSingleInt(
     m_writer->emit(")]\n");
 }
 
+void HLSLSourceEmitter::_emitHLSLDecorationSingleFloat(
+    const char* name,
+    IRFunc* entryPoint,
+    IRFloatLit* val)
+{
+    SLANG_UNUSED(entryPoint);
+    SLANG_ASSERT(val);
+
+    m_writer->emit("[");
+    m_writer->emit(name);
+    m_writer->emit("(");
+
+    switch (val->getOp())
+    {
+    default:
+        SLANG_UNEXPECTED("needed a known floating point value");
+        break;
+
+    case kIROp_FloatLit:
+        m_writer->emit(static_cast<IRConstant*>(val)->value.floatVal);
+        break;
+    }
+
+    m_writer->emit(")]\n");
+}
+
 void HLSLSourceEmitter::_emitHLSLRegisterSemantic(
     LayoutResourceKind kind,
     EmitVarChain* chain,
@@ -511,6 +537,12 @@ void HLSLSourceEmitter::emitEntryPointAttributesImpl(
                 _emitHLSLDecorationSingleString("outputtopology", irFunc, decor->getTopology());
             }
 
+            /* [maxtessfactor(16.0)] */
+            if (auto decor = irFunc->findDecoration<IRMaxTessFactorDecoration>())
+            {
+                _emitHLSLDecorationSingleFloat("maxtessfactor", irFunc, decor->getMaxTessFactor());
+            }
+
             /* [outputcontrolpoints(4)] */
             if (auto decor = irFunc->findDecoration<IROutputControlPointsDecoration>())
             {
@@ -765,6 +797,7 @@ bool HLSLSourceEmitter::tryEmitInstExprImpl(IRInst* inst, const EmitOpInfo& inOu
             m_writer->emit("GroupMemoryBatrierWithGroupSync();\n");
             return true;
         }
+    case kIROp_MakeCoopVector:
     case kIROp_MakeVector:
     case kIROp_MakeMatrix:
         {
@@ -788,6 +821,53 @@ bool HLSLSourceEmitter::tryEmitInstExprImpl(IRInst* inst, const EmitOpInfo& inOu
             }
             break;
         }
+    case kIROp_And:
+    case kIROp_Or:
+        {
+            // SM6.0 requires to use `and()` and `or()` functions for the logical-AND and
+            // logical-OR, respectively, with non-scalar operands.
+            auto targetProfile = getTargetProgram()->getOptionSet().getProfile();
+            if (targetProfile.getVersion() < ProfileVersion::DX_6_0)
+                return false;
+
+            if (as<IRBasicType>(inst->getDataType()))
+                return false;
+
+            if (inst->getOp() == kIROp_And)
+            {
+                m_writer->emit("and(");
+            }
+            else
+            {
+                m_writer->emit("or(");
+            }
+            emitOperand(inst->getOperand(0), getInfo(EmitOp::General));
+            m_writer->emit(", ");
+            emitOperand(inst->getOperand(1), getInfo(EmitOp::General));
+            m_writer->emit(")");
+            return true;
+        }
+    case kIROp_Select:
+        {
+            // SM6.0 requires to use `select()` instead of the ternary operator "?:" when the
+            // operands are non-scalar.
+            auto targetProfile = getTargetProgram()->getOptionSet().getProfile();
+            if (targetProfile.getVersion() < ProfileVersion::DX_6_0)
+                return false;
+
+            if (as<IRBasicType>(inst->getDataType()))
+                return false;
+
+            m_writer->emit("select(");
+            emitOperand(inst->getOperand(0), getInfo(EmitOp::General));
+            m_writer->emit(", ");
+            emitOperand(inst->getOperand(1), getInfo(EmitOp::General));
+            m_writer->emit(", ");
+            emitOperand(inst->getOperand(2), getInfo(EmitOp::General));
+            m_writer->emit(")");
+            return true;
+        }
+
     case kIROp_BitCast:
         {
             // For simplicity, we will handle all bit-cast operations
@@ -1172,23 +1252,30 @@ void HLSLSourceEmitter::emitSimpleValueImpl(IRInst* inst)
             {
             case IRConstant::FloatKind::Nan:
                 {
-                    m_writer->emit("(0.0 / 0.0)");
+                    m_writer->emit("(0.0f / 0.0f)");
                     return;
                 }
             case IRConstant::FloatKind::PositiveInfinity:
                 {
-                    m_writer->emit("(1.0 / 0.0)");
+                    m_writer->emit("(1.0f / 0.0f)");
                     return;
                 }
             case IRConstant::FloatKind::NegativeInfinity:
                 {
-                    m_writer->emit("(-1.0 / 0.0)");
+                    m_writer->emit("(-1.0f / 0.0f)");
                     return;
                 }
             default:
-                break;
+                {
+                    m_writer->emit(constantInst->value.floatVal);
+                    // Add 'f' suffix for 32-bit float literals to ensure DXC treats them as float
+                    if (constantInst->getDataType()->getOp() == kIROp_FloatType)
+                    {
+                        m_writer->emit("f");
+                    }
+                    return;
+                }
             }
-            break;
         }
 
     default:
@@ -1357,6 +1444,16 @@ void HLSLSourceEmitter::emitSimpleTypeImpl(IRType* type)
     case kIROp_AtomicType:
         {
             emitSimpleTypeImpl(cast<IRAtomicType>(type)->getElementType());
+            return;
+        }
+    case kIROp_CoopVectorType:
+        {
+            auto coopVecType = (IRCoopVectorType*)type;
+            m_writer->emit("CoopVector<");
+            emitType(coopVecType->getElementType());
+            m_writer->emit(",");
+            m_writer->emit(getIntVal(coopVecType->getElementCount()));
+            m_writer->emit(">");
             return;
         }
     case kIROp_ConstRefType:
@@ -1578,6 +1675,15 @@ void HLSLSourceEmitter::emitPostKeywordTypeAttributesImpl(IRInst* inst)
     if (const auto payloadDecoration = inst->findDecoration<IRPayloadDecoration>())
     {
         m_writer->emit("[payload] ");
+    }
+    // This can be re-enabled when we add PAQs: https://github.com/shader-slang/slang/issues/3448
+    const bool enablePAQs = false;
+    if (enablePAQs)
+    {
+        if (const auto payloadDecoration = inst->findDecoration<IRRayPayloadDecoration>())
+        {
+            m_writer->emit("[raypayload] ");
+        }
     }
 }
 

@@ -49,6 +49,14 @@ fn _slang_getNan() -> f32
 }
 )";
 
+WGSLSourceEmitter::WGSLSourceEmitter(const Desc& desc)
+    : CLikeSourceEmitter(desc)
+{
+    m_extensionTracker =
+        dynamicCast<ShaderExtensionTracker>(desc.codeGenContext->getExtensionTracker());
+    SLANG_ASSERT(m_extensionTracker);
+}
+
 void WGSLSourceEmitter::emitSwitchCaseSelectorsImpl(
     const SwitchRegion::Case* const currentCase,
     const bool isDefault)
@@ -1304,6 +1312,40 @@ bool WGSLSourceEmitter::tryEmitInstExprImpl(IRInst* inst, const EmitOpInfo& inOu
         }
         break;
 
+    case kIROp_And:
+    case kIROp_Or:
+        {
+            // WGSL doesn't have operator overloadings for `&&` and `||` when the operands are
+            // non-scalar. Unlike HLSL, WGSL doesn't have `and()` and `or()`.
+            auto vecType = as<IRVectorType>(inst->getDataType());
+            if (!vecType)
+                return false;
+
+            // The function signature for `select` in WGSL is different from others:
+            // @const @must_use fn select(f: T, t: T, cond: bool) -> T
+            if (inst->getOp() == kIROp_And)
+            {
+                m_writer->emit("select(vec");
+                m_writer->emit(getIntVal(vecType->getElementCount()));
+                m_writer->emit("<bool>(false), ");
+                emitOperand(inst->getOperand(1), getInfo(EmitOp::General));
+                m_writer->emit(", ");
+                emitOperand(inst->getOperand(0), getInfo(EmitOp::General));
+                m_writer->emit(")");
+            }
+            else
+            {
+                m_writer->emit("select(");
+                emitOperand(inst->getOperand(1), getInfo(EmitOp::General));
+                m_writer->emit(", vec");
+                m_writer->emit(getIntVal(vecType->getElementCount()));
+                m_writer->emit("<bool>(true), ");
+                emitOperand(inst->getOperand(0), getInfo(EmitOp::General));
+                m_writer->emit(")");
+            }
+            return true;
+        }
+
     case kIROp_BitCast:
         {
             // In WGSL there is a built-in bitcast function!
@@ -1556,6 +1598,10 @@ void WGSLSourceEmitter::emitFrontMatterImpl(TargetRequest* /* targetReq */)
         m_writer->emit("enable f16;\n");
         m_writer->emit("\n");
     }
+
+    StringBuilder builder;
+    m_extensionTracker->appendExtensionRequireLinesForWGSL(builder);
+    m_writer->emit(builder.getUnownedSlice());
 }
 
 void WGSLSourceEmitter::emitIntrinsicCallExprImpl(
@@ -1624,6 +1670,30 @@ void WGSLSourceEmitter::emitInterpolationModifiersImpl(
     // "User-defined vertex outputs and fragment inputs of scalar or vector
     //  integer type must always be specified with interpolation type flat."
     // https://www.w3.org/TR/WGSL/#interpolation
+}
+
+void WGSLSourceEmitter::_requireExtension(const UnownedStringSlice& name)
+{
+    m_extensionTracker->requireExtension(name);
+}
+
+void WGSLSourceEmitter::handleRequiredCapabilitiesImpl(IRInst* inst)
+{
+    for (auto decoration : inst->getDecorations())
+    {
+        if (const auto extensionDecoration = as<IRRequireWGSLExtensionDecoration>(decoration))
+        {
+            _requireExtension(extensionDecoration->getExtensionName());
+
+            // TODO: Make this cleaner and only enable this extension if f16 is actually used on the
+            // subgroup intrinsic. Check float type in meta file.
+            if (m_f16ExtensionEnabled && extensionDecoration->getExtensionName() == "subgroups")
+            {
+                String extName = "subgroups_f16";
+                _requireExtension(extName.getUnownedSlice());
+            }
+        }
+    }
 }
 
 } // namespace Slang

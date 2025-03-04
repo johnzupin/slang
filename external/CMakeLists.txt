@@ -89,19 +89,27 @@ endif()
 
 # imgui
 add_library(imgui INTERFACE)
-target_include_directories(imgui INTERFACE "${CMAKE_CURRENT_LIST_DIR}/imgui")
+target_include_directories(
+    imgui
+    ${system}
+    INTERFACE "${CMAKE_CURRENT_LIST_DIR}/imgui"
+)
 
 # stb
 add_library(stb INTERFACE)
-target_include_directories(stb INTERFACE "${CMAKE_CURRENT_LIST_DIR}/stb")
+target_include_directories(
+    stb
+    ${system}
+    INTERFACE "${CMAKE_CURRENT_LIST_DIR}/stb"
+)
 
 # slang-rhi
 if(SLANG_ENABLE_SLANG_RHI)
+    set(SLANG_RHI_BUILD_FROM_SLANG_REPO ON)
     set(SLANG_RHI_BINARY_DIR ${CMAKE_BINARY_DIR}/$<CONFIG>/bin)
+    set(SLANG_RHI_FETCH_SLANG OFF)
     set(SLANG_RHI_SLANG_INCLUDE_DIR ${slang_SOURCE_DIR}/include)
     set(SLANG_RHI_SLANG_BINARY_DIR ${CMAKE_BINARY_DIR})
-    set(SLANG_RHI_BUILD_TESTS OFF)
-    set(SLANG_RHI_BUILD_EXAMPLES OFF)
 
     # Not disabling these break tests (issue #5474)
     set(SLANG_RHI_FETCH_DXC OFF)

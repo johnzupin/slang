@@ -1313,6 +1313,23 @@ int SemanticsVisitor::CompareLookupResultItems(
     bool rightIsExtension = as<ExtensionDecl>(rightDeclRefParent.getDecl()) != nullptr;
     if (leftIsExtension != rightIsExtension)
     {
+        // Add a special case for constructors, where we prefer the one that is not synthesized,
+        if (auto leftCtor = as<ConstructorDecl>(left.declRef.getDecl()))
+        {
+            if (auto rightCtor = as<ConstructorDecl>(right.declRef.getDecl()))
+            {
+                bool leftIsSynthesized = leftCtor->containsFlavor(
+                    ConstructorDecl::ConstructorFlavor::SynthesizedDefault);
+                bool rightIsSynthesized = rightCtor->containsFlavor(
+                    ConstructorDecl::ConstructorFlavor::SynthesizedDefault);
+
+                if (leftIsSynthesized != rightIsSynthesized)
+                {
+                    return int(leftIsSynthesized) - int(rightIsSynthesized);
+                }
+            }
+        }
+
         return int(leftIsExtension) - int(rightIsExtension);
     }
     else if (leftIsExtension)
@@ -1330,7 +1347,7 @@ int SemanticsVisitor::CompareLookupResultItems(
     bool leftIsModule = (as<ModuleDeclarationDecl>(left.declRef) != nullptr);
     bool rightIsModule = (as<ModuleDeclarationDecl>(right.declRef) != nullptr);
     if (leftIsModule != rightIsModule)
-        return int(rightIsModule) - int(leftIsModule);
+        return int(leftIsModule) - int(rightIsModule);
 
     // If both are interface requirements, prefer the more derived interface.
     if (leftIsInterfaceRequirement && rightIsInterfaceRequirement)
@@ -1659,6 +1676,15 @@ int SemanticsVisitor::CompareOverloadCandidates(OverloadCandidate* left, Overloa
         auto itemDiff = CompareLookupResultItems(left->item, right->item);
         if (itemDiff)
             return itemDiff;
+
+        // If one candidate is an implicit conversion, and other candidate is not,
+        // then we should prefer the implicit conversion.
+        int leftIsImplicitConversion =
+            left->item.declRef.getDecl()->findModifier<ImplicitConversionModifier>() ? 1 : 0;
+        int rightIsImplicitConversion =
+            right->item.declRef.getDecl()->findModifier<ImplicitConversionModifier>() ? 1 : 0;
+        if (leftIsImplicitConversion != rightIsImplicitConversion)
+            return rightIsImplicitConversion - leftIsImplicitConversion;
 
         auto specificityDiff = compareOverloadCandidateSpecificity(left->item, right->item);
         if (specificityDiff)
@@ -2177,7 +2203,6 @@ void SemanticsVisitor::AddTypeOverloadCandidates(Type* type, OverloadResolveCont
         context.sourceScope,
         LookupMask::Default,
         options);
-
     AddOverloadCandidates(initializers, context);
 }
 
@@ -2486,27 +2511,6 @@ String SemanticsVisitor::getCallSignatureString(OverloadResolveContext& context)
 Expr* SemanticsVisitor::ResolveInvoke(InvokeExpr* expr)
 {
     OverloadResolveContext context;
-    // check if this is a core module operator call, if so we want to use cached results
-    // to speed up compilation
-    bool shouldAddToCache = false;
-    OperatorOverloadCacheKey key;
-    TypeCheckingCache* typeCheckingCache = getLinkage()->getTypeCheckingCache();
-    if (auto opExpr = as<OperatorExpr>(expr))
-    {
-        if (key.fromOperatorExpr(opExpr))
-        {
-            OverloadCandidate candidate;
-            if (typeCheckingCache->resolvedOperatorOverloadCache.tryGetValue(key, candidate))
-            {
-                context.bestCandidateStorage = candidate;
-                context.bestCandidate = &context.bestCandidateStorage;
-            }
-            else
-            {
-                shouldAddToCache = true;
-            }
-        }
-    }
 
     // Look at the base expression for the call, and figure out how to invoke it.
     auto funcExpr = expr->functionExpr;
@@ -2547,6 +2551,42 @@ Expr* SemanticsVisitor::ResolveInvoke(InvokeExpr* expr)
     context.sourceScope = m_outerScope;
     context.baseExpr = GetBaseExpr(funcExpr);
 
+    // check if this is a core module operator call, if so we want to use cached results
+    // to speed up compilation
+    bool shouldAddToCache = false;
+    OperatorOverloadCacheKey key;
+    TypeCheckingCache* typeCheckingCache = getLinkage()->getTypeCheckingCache();
+    if (auto opExpr = as<OperatorExpr>(expr))
+    {
+        if (key.fromOperatorExpr(opExpr))
+        {
+            key.isGLSLMode = getShared()->glslModuleDecl != nullptr;
+            ResolvedOperatorOverload candidate;
+            if (typeCheckingCache->resolvedOperatorOverloadCache.tryGetValue(key, candidate))
+            {
+                // We should only use the cached candidate if it is persistent direct declref
+                // created from GlobalSession's ASTBuilder, or it is created in the current Linkage.
+                if (candidate.cacheVersion == typeCheckingCache->version ||
+                    findNextOuterGeneric(candidate.decl) == nullptr)
+                {
+                    context.bestCandidateStorage = candidate.candidate;
+                    context.bestCandidate = &context.bestCandidateStorage;
+                }
+                else
+                {
+                    LookupResultItem overloadCandidate = {};
+                    overloadCandidate.declRef = getOuterGenericOrSelf(candidate.decl);
+                    AddDeclRefOverloadCandidates(overloadCandidate, context, 0);
+                    shouldAddToCache = true;
+                }
+            }
+            else
+            {
+                shouldAddToCache = true;
+            }
+        }
+    }
+
     // We run a special case here where an `InvokeExpr`
     // with a single argument where the base/func expression names
     // a type should always be treated as an explicit type coercion
@@ -2565,7 +2605,7 @@ Expr* SemanticsVisitor::ResolveInvoke(InvokeExpr* expr)
     // type coercion.
     bool typeOverloadChecked = false;
 
-    if (expr->arguments.getCount() == 1)
+    if (expr->arguments.getCount() == 1 && !as<ExplicitCtorInvokeExpr>(expr))
     {
         if (const auto typeType = as<TypeType>(funcExpr->type))
         {
@@ -2709,7 +2749,18 @@ Expr* SemanticsVisitor::ResolveInvoke(InvokeExpr* expr)
         // We will report errors for this one candidate, then, to give
         // the user the most help we can.
         if (shouldAddToCache)
-            typeCheckingCache->resolvedOperatorOverloadCache[key] = *context.bestCandidate;
+        {
+            if (isFromCoreModule(context.bestCandidate->item.declRef.getDecl()) ||
+                getShared()->glslModuleDecl ==
+                    getModuleDecl(context.bestCandidate->item.declRef.getDecl()))
+            {
+                ResolvedOperatorOverload overloadResult;
+                overloadResult.candidate = *context.bestCandidate;
+                overloadResult.decl = context.bestCandidate->item.declRef.getDecl();
+                overloadResult.cacheVersion = typeCheckingCache->version;
+                typeCheckingCache->resolvedOperatorOverloadCache[key] = overloadResult;
+            }
+        }
 
         // Now that we have resolved the overload candidate, we need to undo an `openExistential`
         // operation that was applied to `out` arguments.
