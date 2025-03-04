@@ -25,9 +25,6 @@ override_dh_auto_configure:
 	dh_auto_configure --    -DCMAKE_LIBRARY_PATH=$(DEB_HOST_MULTIARCH) \
 				-DSLANG_SLANG_LLVM_FLAVOR="DISABLE" \
 				-DSLANG_ENABLE_EXAMPLES="OFF" \
-				-DSLANG_RHI_HAS_WGPU="OFF" \
-				-DSLANG_RHI_ENABLE_WGPU="OFF" \
 				-DSLANG_ENABLE_TESTS="OFF" \
-				-DENABLE_CTEST="OFF" \
-				-DSLANG_RHI_ENABLE_CUDA="OFF" \
-				-DSLANG_VERSION_FULL="lunarg-ubuntu-jammy-package"
+				-DSLANG_VERSION_FULL="lunarg-ubuntu-jammy-package" \
+				-DSLANG_ENABLE_SLANG_RHI="OFF"
