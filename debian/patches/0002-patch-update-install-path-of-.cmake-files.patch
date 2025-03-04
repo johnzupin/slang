@@ -7,10 +7,10 @@ Subject: patch: update install path of .cmake files
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 5cad7dd..30fb271 100644
+index 48d263d..5da3826 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -399,5 +399,5 @@ install(
+@@ -402,5 +402,5 @@ install(
      FILES
          "${PROJECT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
          "${PROJECT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
