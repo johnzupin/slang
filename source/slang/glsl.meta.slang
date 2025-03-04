@@ -136,7 +136,27 @@ public property uint3 gl_WorkGroupSize
 // TODO: define overload for tessellation control stage.
 public in int gl_InvocationID : SV_GSInstanceID;
 
-public in int gl_InstanceIndex : SV_InstanceID;
+internal in int __sv_InstanceIndex : SV_InstanceID;
+
+// SPIRV InstanceIndex builtin for vertex shader
+public property int gl_InstanceIndex
+{
+    [require(vertex)]
+    get
+    {
+        __target_switch
+        {
+        default:
+            return __sv_InstanceIndex;
+        case glsl:
+            __intrinsic_asm "gl_InstanceIndex";
+        case spirv:
+            return spirv_asm {
+                result:$$int = OpLoad builtin(InstanceIndex:int);
+            };
+        }
+    }
+}
 public in bool gl_FrontFacing : SV_IsFrontFace;
 
 // TODO: define overload for geometry stage.
@@ -4824,24 +4844,41 @@ public property uint3 gl_LaunchSizeEXT
     }
 }
 
+internal in int __gl_PrimitiveID : SV_PrimitiveID;
 
 public property int gl_PrimitiveID 
 {
-    [require(cuda_glsl_hlsl_spirv, raytracing_anyhit_closesthit_intersection)]
+    [require(cuda_glsl_hlsl_spirv)]
     get 
     {
-        setupExtForRayTracingBuiltIn();
-        return PrimitiveIndex();
+        __stage_switch
+        {
+        case anyhit:
+        case closesthit:
+        case intersection:
+            setupExtForRayTracingBuiltIn();
+            return PrimitiveIndex();
+        default:
+            return __gl_PrimitiveID;   
+        }
     }
 }
 
 public property int gl_InstanceID 
 {
-    [require(cuda_glsl_hlsl_spirv, raytracing_anyhit_closesthit_intersection)]
+    [require(cuda_glsl_hlsl_spirv)]
     get 
     {
-        setupExtForRayTracingBuiltIn();
-        return InstanceIndex();
+        __stage_switch
+        {
+        case anyhit:
+        case closesthit:
+        case intersection:
+            setupExtForRayTracingBuiltIn();
+            return InstanceIndex();
+        default:
+            return gl_InstanceIndex;
+        }
     }
 }
 
@@ -6305,7 +6342,7 @@ void shader_subgroup_preamble() {
 
 // GL_KHR_shader_subgroup_basic Built-in Variables
 
-[require(cpp_cuda_glsl_hlsl_spirv, subgroup_basic)]
+[require(cpp_cuda_glsl_hlsl_spirv_wgsl, subgroup_basic)]
 void requireGLSLExtForSubgroupBasicBuiltin() {
     __target_switch
     {
@@ -6317,7 +6354,7 @@ void requireGLSLExtForSubgroupBasicBuiltin() {
     }
 }
 
-[require(cpp_cuda_glsl_hlsl_spirv, subgroup_basic)]
+[require(cpp_cuda_glsl_hlsl_spirv_wgsl, subgroup_basic)]
 void setupExtForSubgroupBasicBuiltIn() {
     __target_switch
     {
@@ -6329,7 +6366,7 @@ void setupExtForSubgroupBasicBuiltIn() {
 }
 
 __spirv_version(1.3)
-[require(cpp_cuda_glsl_hlsl_spirv, subgroup_ballot)]
+[require(cpp_cuda_glsl_hlsl_spirv_wgsl, subgroup_ballot)]
 void requireGLSLExtForSubgroupBallotBuiltin() {
     __target_switch
     {
@@ -6342,7 +6379,7 @@ void requireGLSLExtForSubgroupBallotBuiltin() {
 }
 
 __spirv_version(1.3)
-[require(cpp_cuda_glsl_hlsl_spirv, subgroup_ballot)]
+[require(cpp_cuda_glsl_hlsl_spirv_wgsl, subgroup_ballot)]
 void setupExtForSubgroupBallotBuiltIn() {
     __target_switch
     {
@@ -6392,7 +6429,7 @@ public property uint gl_SubgroupID
 
 public property uint gl_SubgroupSize
 {
-    [require(cpp_cuda_glsl_hlsl_spirv, subgroup_basic)]
+    [require(cpp_cuda_glsl_hlsl_spirv_wgsl, subgroup_basic)]
     get {
         setupExtForSubgroupBasicBuiltIn();
         return WaveGetLaneCount();
@@ -6401,7 +6438,7 @@ public property uint gl_SubgroupSize
 
 public property uint gl_SubgroupInvocationID
 {
-    [require(cpp_cuda_glsl_hlsl_spirv, subgroup_basic)]
+    [require(cpp_cuda_glsl_hlsl_spirv_wgsl, subgroup_basic)]
     get {
         setupExtForSubgroupBasicBuiltIn();
         return WaveGetLaneIndex();
@@ -6508,7 +6545,7 @@ public property uvec4 gl_SubgroupLtMask
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_basic)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_basic)]
+[require(cuda_glsl_hlsl_metal_spirv, subgroup_basic)]
 public void subgroupBarrier()
 {
     __target_switch
@@ -6519,6 +6556,8 @@ public void subgroupBarrier()
         __intrinsic_asm "AllMemoryBarrierWithGroupSync()";
     case glsl:
         __intrinsic_asm "subgroupBarrier()";
+    case metal:
+        __intrinsic_asm "simdgroup_barrier(mem_flags::mem_none)";
     case spirv:
         spirv_asm {
             OpCapability Shader;
@@ -6531,7 +6570,7 @@ public void subgroupBarrier()
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_basic)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_basic)]
+[require(cuda_glsl_hlsl_metal_spirv, subgroup_basic)]
 public void subgroupMemoryBarrier()
 {
     __target_switch
@@ -6542,6 +6581,8 @@ public void subgroupMemoryBarrier()
         __intrinsic_asm "AllMemoryBarrier()";
     case glsl:
         __intrinsic_asm "subgroupMemoryBarrier()";
+    case metal:
+        __intrinsic_asm "simdgroup_barrier(mem_flags::mem_device)";
     case spirv:
         spirv_asm {
             OpCapability Shader;
@@ -6554,7 +6595,7 @@ public void subgroupMemoryBarrier()
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_basic)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_basic)]
+[require(cuda_glsl_hlsl_metal_spirv, subgroup_basic)]
 public void subgroupMemoryBarrierBuffer()
 {
     // the following implementation is NOT the same as DeviceMemoryBarrier
@@ -6567,6 +6608,8 @@ public void subgroupMemoryBarrierBuffer()
         __intrinsic_asm "DeviceMemoryBarrier()";
     case glsl:
         __intrinsic_asm "subgroupMemoryBarrierBuffer()";
+    case metal:
+        __intrinsic_asm "simdgroup_barrier(mem_flags::mem_device)";
     case spirv:
         spirv_asm {
             OpCapability Shader;
@@ -6579,7 +6622,7 @@ public void subgroupMemoryBarrierBuffer()
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_basic)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_basic)]
+[require(cuda_glsl_hlsl_metal_spirv, subgroup_basic)]
 public void subgroupMemoryBarrierImage()
 {
     __target_switch
@@ -6590,6 +6633,8 @@ public void subgroupMemoryBarrierImage()
         __intrinsic_asm "DeviceMemoryBarrier()";
     case glsl:
         __intrinsic_asm "subgroupMemoryBarrierImage()";
+    case metal:
+        __intrinsic_asm "simdgroup_barrier(mem_flags::mem_texture)";
     case spirv:
         spirv_asm {
             OpMemoryBarrier Subgroup AcquireRelease|ImageMemory
@@ -6601,7 +6646,7 @@ public void subgroupMemoryBarrierImage()
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_basic)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_basic)]
+[require(cuda_glsl_hlsl_metal_spirv, subgroup_basic)]
 public void subgroupMemoryBarrierShared()
 {
     __target_switch
@@ -6612,6 +6657,8 @@ public void subgroupMemoryBarrierShared()
         __intrinsic_asm "GroupMemoryBarrier()";
     case glsl:
         __intrinsic_asm "subgroupMemoryBarrierShared()";
+    case metal:
+        __intrinsic_asm "simdgroup_barrier(mem_flags::mem_threadgroup)";
     case spirv:
         spirv_asm {
             // SubgroupMemory triggers vulkan validation layer error; 
@@ -6625,16 +6672,14 @@ public void subgroupMemoryBarrierShared()
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_basic) 
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_basic)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_basic)]
 public bool subgroupElect()
 {
     __target_switch
     {
     case cuda:
         __intrinsic_asm "( (__activemask() & (__activemask()*-1)) == _getLaneId())";    
-    case glsl:
-    case spirv:
-    case hlsl:
+    default:
         return WaveIsFirstLane();
 
     }
@@ -6645,7 +6690,7 @@ public bool subgroupElect()
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_vote)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_vote)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_vote)]
 public bool subgroupAll(bool value)
 {
     return WaveActiveAllTrue(value);
@@ -6654,7 +6699,7 @@ public bool subgroupAll(bool value)
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_vote)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_vote)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_vote)]
 public bool subgroupAny(bool value)
 {
     return WaveActiveAnyTrue(value);
@@ -6688,7 +6733,7 @@ __generic<T : __BuiltinArithmeticType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public T subgroupAdd(T value)
 {
     shader_subgroup_preamble<T>();
@@ -6699,7 +6744,7 @@ __generic<T : __BuiltinArithmeticType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public T subgroupMul(T value)
 {
     shader_subgroup_preamble<T>();
@@ -6710,7 +6755,7 @@ __generic<T : __BuiltinArithmeticType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public T subgroupMin(T value)
 {
     shader_subgroup_preamble<T>();
@@ -6721,7 +6766,7 @@ __generic<T : __BuiltinArithmeticType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public T subgroupMax(T value)
 {
     shader_subgroup_preamble<T>();
@@ -6731,14 +6776,19 @@ public T subgroupMax(T value)
 __generic<T : __BuiltinLogicalType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
+__wgsl_extension(subgroups)
 [ForceInline]
-[require(glsl_spirv, subgroup_arithmetic)]
+[require(glsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public T subgroupAnd(T value)
 {
     shader_subgroup_preamble<T>();
     __target_switch
     {
-    case glsl: __intrinsic_asm "subgroupAnd($0)";
+    case glsl:
+    case wgsl:
+        __intrinsic_asm "subgroupAnd($0)";
+    case metal:
+        __intrinsic_asm "simd_and";
     case spirv:
         if (__isBool<T>()) {
             return spirv_asm {
@@ -6758,14 +6808,19 @@ public T subgroupAnd(T value)
 __generic<T : __BuiltinLogicalType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
+__wgsl_extension(subgroups)
 [ForceInline]
-[require(glsl_spirv, subgroup_arithmetic)]
+[require(glsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public T subgroupOr(T value)
 {
     shader_subgroup_preamble<T>();
     __target_switch
     {
-    case glsl: __intrinsic_asm "subgroupOr($0)";
+    case glsl:
+    case wgsl:
+        __intrinsic_asm "subgroupOr($0)";
+    case metal:
+        __intrinsic_asm "simd_or";
     case spirv:
         if (__isBool<T>()) {
             return spirv_asm {
@@ -6785,14 +6840,19 @@ public T subgroupOr(T value)
 __generic<T : __BuiltinLogicalType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
+__wgsl_extension(subgroups)
 [ForceInline]
-[require(glsl_spirv, subgroup_arithmetic)]
+[require(glsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public T subgroupXor(T value)
 {
     shader_subgroup_preamble<T>();
     __target_switch
     {
-    case glsl: __intrinsic_asm "subgroupXor($0)";
+    case glsl:
+    case wgsl:
+        __intrinsic_asm "subgroupXor($0)";
+    case metal:
+        __intrinsic_asm "simd_xor";
     case spirv:
         if (__isBool<T>()) {
             return spirv_asm {
@@ -6812,15 +6872,19 @@ public T subgroupXor(T value)
 __generic<T : __BuiltinArithmeticType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
+__wgsl_extension(subgroups)
 [ForceInline]
-[require(glsl_spirv, subgroup_arithmetic)]
+[require(glsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public T subgroupInclusiveAdd(T value)
 {
     shader_subgroup_preamble<T>();
     __target_switch
     {
     case glsl:
+    case wgsl:
         __intrinsic_asm "subgroupInclusiveAdd($0)";
+    case metal:
+        __intrinsic_asm "simd_prefix_inclusive_sum";
     case spirv:
         if (__isFloat<T>())
             return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniformFAdd $$T result Subgroup InclusiveScan $value};
@@ -6833,15 +6897,19 @@ public T subgroupInclusiveAdd(T value)
 __generic<T : __BuiltinArithmeticType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
+__wgsl_extension(subgroups)
 [ForceInline]
-[require(glsl_spirv, subgroup_arithmetic)]
+[require(glsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public T subgroupInclusiveMul(T value)
 {
     shader_subgroup_preamble<T>();
     __target_switch
     {
     case glsl:
+    case wgsl:
         __intrinsic_asm "subgroupInclusiveMul($0)";
+    case metal:
+        __intrinsic_asm "simd_prefix_inclusive_product";
     case spirv:
         if (__isFloat<T>())
             return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniformFMul $$T result Subgroup InclusiveScan $value};
@@ -6974,7 +7042,7 @@ __generic<T : __BuiltinArithmeticType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public T subgroupExclusiveAdd(T value)
 {
     shader_subgroup_preamble<T>();
@@ -6986,7 +7054,7 @@ __generic<T : __BuiltinArithmeticType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public T subgroupExclusiveMul(T value)
 {
     shader_subgroup_preamble<T>();
@@ -7097,7 +7165,7 @@ __generic<T : __BuiltinArithmeticType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public vector<T,N> subgroupAdd(vector<T,N> value)
 {
     shader_subgroup_preamble<T>();
@@ -7108,7 +7176,7 @@ __generic<T : __BuiltinArithmeticType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public vector<T,N> subgroupMul(vector<T,N> value)
 {
     shader_subgroup_preamble<T>();
@@ -7119,7 +7187,7 @@ __generic<T : __BuiltinArithmeticType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public vector<T,N> subgroupMin(vector<T,N> value)
 {
     shader_subgroup_preamble<T>();
@@ -7130,7 +7198,7 @@ __generic<T : __BuiltinArithmeticType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public vector<T,N> subgroupMax(vector<T,N> value)
 {
     shader_subgroup_preamble<T>();
@@ -7140,14 +7208,20 @@ public vector<T,N> subgroupMax(vector<T,N> value)
 __generic<T : __BuiltinLogicalType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
+__wgsl_extension(subgroups)
 [ForceInline]
-[require(glsl_spirv, subgroup_arithmetic)]
+[require(glsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public vector<T,N> subgroupAnd(vector<T,N> value)
 {
     shader_subgroup_preamble<T>();
     __target_switch
     {
-    case glsl: __intrinsic_asm "subgroupAnd($0)";
+    case glsl:
+    case wgsl:
+        // TODO: Bool inputs are invalid for Metal and WGSL, cast them to int or don't allow them to compile.
+        __intrinsic_asm "subgroupAnd($0)";
+    case metal:
+        __intrinsic_asm "simd_and";
     case spirv:
         if (__isBool<T>()) {
             return spirv_asm {
@@ -7168,14 +7242,19 @@ public vector<T,N> subgroupAnd(vector<T,N> value)
 __generic<T : __BuiltinLogicalType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
+__wgsl_extension(subgroups)
 [ForceInline]
-[require(glsl_spirv, subgroup_arithmetic)]
+[require(glsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public vector<T,N> subgroupOr(vector<T,N> value)
 {
     shader_subgroup_preamble<T>();
     __target_switch
     {
-    case glsl: __intrinsic_asm "subgroupOr($0)";
+    case glsl:
+    case wgsl:
+        __intrinsic_asm "subgroupOr($0)";
+    case metal:
+        __intrinsic_asm "simd_or";
     case spirv:
         if (__isBool<T>()) {
             return spirv_asm {
@@ -7196,14 +7275,19 @@ public vector<T,N> subgroupOr(vector<T,N> value)
 __generic<T : __BuiltinLogicalType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
+__wgsl_extension(subgroups)
 [ForceInline]
-[require(glsl_spirv, subgroup_arithmetic)]
+[require(glsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public vector<T,N> subgroupXor(vector<T,N> value)
 {
     shader_subgroup_preamble<T>();
     __target_switch
     {
-    case glsl: __intrinsic_asm "subgroupXor($0)";
+    case glsl:
+    case wgsl:
+        __intrinsic_asm "subgroupXor($0)";
+    case metal:
+        __intrinsic_asm "simd_xor";
     case spirv:
         if (__isBool<T>()) {
             return spirv_asm {
@@ -7223,15 +7307,19 @@ public vector<T,N> subgroupXor(vector<T,N> value)
 __generic<T : __BuiltinArithmeticType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
+__wgsl_extension(subgroups)
 [ForceInline]
-[require(glsl_spirv, subgroup_arithmetic)]
+[require(glsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public vector<T,N> subgroupInclusiveAdd(vector<T,N> value)
 {
     shader_subgroup_preamble<T>();
     __target_switch
     {
     case glsl:
+    case wgsl:
         __intrinsic_asm "subgroupInclusiveAdd($0)";
+    case metal:
+        __intrinsic_asm "simd_prefix_inclusive_sum";
     case spirv:
         if (__isFloat<T>())
             return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniformFAdd $$vector<T,N> result Subgroup InclusiveScan $value};
@@ -7244,15 +7332,19 @@ public vector<T,N> subgroupInclusiveAdd(vector<T,N> value)
 __generic<T : __BuiltinArithmeticType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
+__wgsl_extension(subgroups)
 [ForceInline]
-[require(glsl_spirv, subgroup_arithmetic)]
+[require(glsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public vector<T,N> subgroupInclusiveMul(vector<T,N> value)
 {
     shader_subgroup_preamble<T>();
     __target_switch
     {
     case glsl:
+    case wgsl:
         __intrinsic_asm "subgroupInclusiveMul($0)";
+    case metal:
+        __intrinsic_asm "simd_prefix_inclusive_product";
     case spirv:
         if (__isFloat<T>())
             return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniformFMul $$vector<T,N> result Subgroup InclusiveScan $value};
@@ -7366,7 +7458,7 @@ __generic<T : __BuiltinArithmeticType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public vector<T,N> subgroupExclusiveAdd(vector<T,N> value)
 {
     shader_subgroup_preamble<T>();
@@ -7378,7 +7470,7 @@ __generic<T : __BuiltinArithmeticType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 public vector<T,N> subgroupExclusiveMul(vector<T,N> value)
 {
     shader_subgroup_preamble<T>();
@@ -7488,51 +7580,65 @@ __generic<T : __BuiltinType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_ballot)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_ballot)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_ballot)]
 public T subgroupBroadcast(T value, uint id)
 {
     shader_subgroup_preamble<T>();
-    return WaveMaskBroadcastLaneAt(WaveGetActiveMask(), value, id);
+    __target_switch
+    {
+    case wgsl:
+        // WGSL's intrinsic does not accept non-const ids, do shuffle instead.
+        __intrinsic_asm "subgroupShuffle";
+    default:
+        return WaveBroadcastLaneAt(value, id);
+    }
 }
 
 __generic<T : __BuiltinType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_ballot)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_ballot)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_ballot)]
 public vector<T,N> subgroupBroadcast(vector<T,N> value, uint id)
 {
     shader_subgroup_preamble<T>();
-    return WaveMaskBroadcastLaneAt(WaveGetActiveMask(), value, id);
+    __target_switch
+    {
+    case wgsl:
+        // WGSL's intrinsic does not accept non-const ids, do shuffle instead.
+        __intrinsic_asm "subgroupShuffle";
+    default:
+        return WaveBroadcastLaneAt(value, id);
+    }
 }
 
 __generic<T : __BuiltinType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_ballot)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_ballot)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_ballot)]
 public T subgroupBroadcastFirst(T value)
 {
     shader_subgroup_preamble<T>();
-    return WaveMaskReadLaneFirst(WaveGetActiveMask(), value);
+    return WaveReadLaneFirst(value);
 }
 
 __generic<T : __BuiltinType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_ballot)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_ballot)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_ballot)]
 public vector<T,N> subgroupBroadcastFirst(vector<T,N> value)
 {
     shader_subgroup_preamble<T>();
-    return WaveMaskReadLaneFirst(WaveGetActiveMask(), value);
+    return WaveReadLaneFirst(value);
 }
 
 // WaveMaskBallot is not the same; it force trunc's
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_ballot)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_ballot)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_ballot)]
 public uvec4 subgroupBallot(bool value)
 {
     return WaveActiveBallot(value);
@@ -7713,7 +7819,7 @@ __generic<T : __BuiltinType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_shuffle)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_shuffle)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_shuffle)]
 public T subgroupShuffle(T value, uint index)
 {
     shader_subgroup_preamble<T>();
@@ -7723,14 +7829,18 @@ public T subgroupShuffle(T value, uint index)
 __generic<T : __BuiltinType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_shuffle)
-[require(glsl_spirv, subgroup_shuffle)]
+__wgsl_extension(subgroups)
+[require(glsl_metal_spirv_wgsl, subgroup_shuffle)]
 [ForceInline] public T subgroupShuffleXor(T value, uint mask)
 {
     shader_subgroup_preamble<T>();
     __target_switch
     {
     case glsl:
+    case wgsl:
         __intrinsic_asm "subgroupShuffleXor($0,$1)";
+    case metal:
+        __intrinsic_asm "simd_shuffle_xor($0, ushort($1))";
     case spirv:
         return spirv_asm {
             OpCapability GroupNonUniformBallot; 
@@ -7743,7 +7853,7 @@ __generic<T : __BuiltinType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_shuffle)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, subgroup_shuffle)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_shuffle)]
 public vector<T,N> subgroupShuffle(vector<T,N> value, uint index)
 {
     shader_subgroup_preamble<T>();
@@ -7753,15 +7863,19 @@ public vector<T,N> subgroupShuffle(vector<T,N> value, uint index)
 __generic<T : __BuiltinType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_shuffle)
+__wgsl_extension(subgroups)
 [ForceInline]
-[require(glsl_spirv, subgroup_shuffle)]
+[require(glsl_metal_spirv_wgsl, subgroup_shuffle)]
 public vector<T,N> subgroupShuffleXor(vector<T,N> value, uint mask)
 {
     shader_subgroup_preamble<T>();
     __target_switch
     {
     case glsl:
+    case wgsl:
         __intrinsic_asm "subgroupShuffleXor($0,$1)";
+    case metal:
+        __intrinsic_asm "simd_shuffle_xor($0, ushort($1))";
     case spirv:
         return spirv_asm {
             OpCapability GroupNonUniformBallot; 
@@ -7776,15 +7890,19 @@ public vector<T,N> subgroupShuffleXor(vector<T,N> value, uint mask)
 __generic<T : __BuiltinType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_shuffle_relative)
+__wgsl_extension(subgroups)
 [ForceInline]
-[require(glsl_spirv, subgroup_shufflerelative)]
+[require(glsl_metal_spirv_wgsl, subgroup_shufflerelative)]
 public T subgroupShuffleUp(T value, uint delta)
 {
     shader_subgroup_preamble<T>();
     __target_switch
     {
     case glsl:
+    case wgsl:
         __intrinsic_asm "subgroupShuffleUp($0, $1)";
+    case metal:
+        __intrinsic_asm "simd_shuffle_up($0, ushort($1))";
     case spirv:
         return spirv_asm {
             OpCapability GroupNonUniformShuffleRelative;
@@ -7796,15 +7914,19 @@ public T subgroupShuffleUp(T value, uint delta)
 __generic<T : __BuiltinType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_shuffle_relative)
+__wgsl_extension(subgroups)
 [ForceInline]
-[require(glsl_spirv, subgroup_shufflerelative)]
+[require(glsl_metal_spirv_wgsl, subgroup_shufflerelative)]
 public T subgroupShuffleDown(T value, uint delta)
 {
     shader_subgroup_preamble<T>();
     __target_switch
     {
     case glsl:
+    case wgsl:
         __intrinsic_asm "subgroupShuffleDown($0, $1)";
+    case metal:
+        __intrinsic_asm "simd_shuffle_down($0, ushort($1))";
     case spirv:
         return spirv_asm {
             OpCapability GroupNonUniformShuffleRelative; 
@@ -7817,15 +7939,19 @@ public T subgroupShuffleDown(T value, uint delta)
 __generic<T : __BuiltinType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_shuffle_relative)
+__wgsl_extension(subgroups)
 [ForceInline]
-[require(glsl_spirv, subgroup_shufflerelative)]
+[require(glsl_metal_spirv_wgsl, subgroup_shufflerelative)]
 public vector<T,N> subgroupShuffleUp(vector<T,N> value, uint delta)
 {
     shader_subgroup_preamble<T>();
     __target_switch
     {
     case glsl:
+    case wgsl:
         __intrinsic_asm "subgroupShuffleUp($0, $1)";
+    case metal:
+        __intrinsic_asm "simd_shuffle_up($0, ushort($1))";
     case spirv:
         return spirv_asm {
             OpCapability GroupNonUniformShuffleRelative;
@@ -7837,15 +7963,19 @@ public vector<T,N> subgroupShuffleUp(vector<T,N> value, uint delta)
 __generic<T : __BuiltinType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_shuffle_relative)
+__wgsl_extension(subgroups)
 [ForceInline]
-[require(glsl_spirv, subgroup_shufflerelative)]
+[require(glsl_metal_spirv_wgsl, subgroup_shufflerelative)]
 public vector<T,N> subgroupShuffleDown(vector<T,N> value, uint delta)
 {
     shader_subgroup_preamble<T>();
     __target_switch
     {
     case glsl:
+    case wgsl:
         __intrinsic_asm "subgroupShuffleDown($0, $1)";
+    case metal:
+        __intrinsic_asm "simd_shuffle_down($0, ushort($1))";
     case spirv:
         return spirv_asm {
             OpCapability GroupNonUniformShuffleRelative;
@@ -8161,7 +8291,7 @@ __generic<T : __BuiltinType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_quad)
 [ForceInline]
-[require(glsl_hlsl_spirv, subgroup_quad)]
+[require(glsl_hlsl_spirv_wgsl, subgroup_quad)]
 public T subgroupQuadSwapHorizontal(T value)
 {
     shader_subgroup_preamble<T>();
@@ -8172,7 +8302,7 @@ __generic<T : __BuiltinType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_quad)
 [ForceInline]
-[require(glsl_hlsl_spirv, subgroup_quad)]
+[require(glsl_hlsl_spirv_wgsl, subgroup_quad)]
 public T subgroupQuadSwapVertical(T value)
 {
     shader_subgroup_preamble<T>();
@@ -8183,7 +8313,7 @@ __generic<T : __BuiltinType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_quad)
 [ForceInline]
-[require(glsl_hlsl_spirv, subgroup_quad)]
+[require(glsl_hlsl_spirv_wgsl, subgroup_quad)]
 public T subgroupQuadSwapDiagonal(T value)
 {
     shader_subgroup_preamble<T>();
@@ -8206,7 +8336,7 @@ __generic<T : __BuiltinType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_quad)
 [ForceInline]
-[require(glsl_hlsl_spirv, subgroup_quad)]
+[require(glsl_hlsl_spirv_wgsl, subgroup_quad)]
 public vector<T,N> subgroupQuadSwapHorizontal(vector<T,N> value)
 {
     shader_subgroup_preamble<T>();
@@ -8217,7 +8347,7 @@ __generic<T : __BuiltinType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_quad)
 [ForceInline]
-[require(glsl_hlsl_spirv, subgroup_quad)]
+[require(glsl_hlsl_spirv_wgsl, subgroup_quad)]
 public vector<T,N> subgroupQuadSwapVertical(vector<T,N> value)
 {
     shader_subgroup_preamble<T>();
@@ -8228,7 +8358,7 @@ __generic<T : __BuiltinType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_quad)
 [ForceInline]
-[require(glsl_hlsl_spirv, subgroup_quad)]
+[require(glsl_hlsl_spirv_wgsl, subgroup_quad)]
 public vector<T,N> subgroupQuadSwapDiagonal(vector<T,N> value)
 {
     shader_subgroup_preamble<T>();

@@ -1737,6 +1737,13 @@ struct ValLoweringVisitor : ValVisitor<ValLoweringVisitor, LoweredValInfo, Lower
             context->irBuilder->getTypeEqualityWitness(witnessType, subType, supType));
     }
 
+    LoweredValInfo visitTypeCoercionWitness(TypeCoercionWitness*)
+    {
+        // When we fully support type coercion constraints, we should lower the witness into a
+        // function that does the conversion.
+        return LoweredValInfo();
+    }
+
     LoweredValInfo visitTransitiveSubtypeWitness(TransitiveSubtypeWitness* val)
     {
         // The base (subToMid) will turn into a value with
@@ -2332,6 +2339,30 @@ void addVarDecorations(IRGenContext* context, IRInst* inst, Decl* decl)
             builder->addMemoryQualifierSetDecoration(
                 inst,
                 IRIntegerValue(collection->getMemoryQualifierBit()));
+        }
+        else if (auto geometryModifier = as<HLSLGeometryShaderInputPrimitiveTypeModifier>(mod))
+        {
+            IROp op = kIROp_Invalid;
+            switch (geometryModifier->astNodeType)
+            {
+            case ASTNodeType::HLSLTriangleModifier:
+                op = kIROp_TriangleInputPrimitiveTypeDecoration;
+                break;
+            case ASTNodeType::HLSLPointModifier:
+                op = kIROp_PointInputPrimitiveTypeDecoration;
+                break;
+            case ASTNodeType::HLSLLineModifier:
+                op = kIROp_LineInputPrimitiveTypeDecoration;
+                break;
+            case ASTNodeType::HLSLLineAdjModifier:
+                op = kIROp_LineAdjInputPrimitiveTypeDecoration;
+                break;
+            case ASTNodeType::HLSLTriangleAdjModifier:
+                op = kIROp_TriangleAdjInputPrimitiveTypeDecoration;
+                break;
+            }
+            if (op != kIROp_Invalid)
+                builder->addDecoration(inst, op);
         }
         // TODO: what are other modifiers we need to propagate through?
     }
@@ -4677,6 +4708,16 @@ struct ExprLoweringVisitorBase : public ExprVisitor<Derived, LoweredValInfo>
         {
             return LoweredValInfo::simple(getBuilder()->getNullPtrValue(irType));
         }
+        else if (auto tupleType = as<TupleType>(type))
+        {
+            List<IRInst*> args;
+            for (Index i = 0; i < tupleType->getMemberCount(); i++)
+            {
+                args.add(getSimpleVal(context, getDefaultVal(tupleType->getMember(i))));
+            }
+            return LoweredValInfo::simple(
+                getBuilder()->emitMakeTuple(irType, args.getCount(), args.getBuffer()));
+        }
         else if (auto declRefType = as<DeclRefType>(type))
         {
             DeclRef<Decl> declRef = declRefType->getDeclRef();
@@ -4828,6 +4869,29 @@ struct ExprLoweringVisitorBase : public ExprVisitor<Derived, LoweredValInfo>
             return LoweredValInfo::simple(
                 getBuilder()->emitMakeMatrix(irType, args.getCount(), args.getBuffer()));
         }
+        else if (auto coopVecType = as<CoopVectorExpressionType>(type))
+        {
+            UInt elementCount = (UInt)getIntVal(coopVecType->getElementCount());
+
+            for (UInt ee = 0; ee < argCount; ++ee)
+            {
+                auto argExpr = expr->args[ee];
+                LoweredValInfo argVal = lowerRValueExpr(context, argExpr);
+                args.add(getSimpleVal(context, argVal));
+            }
+            if (elementCount > argCount)
+            {
+                auto irDefaultValue =
+                    getSimpleVal(context, getDefaultVal(coopVecType->getElementType()));
+                for (UInt ee = argCount; ee < elementCount; ++ee)
+                {
+                    args.add(irDefaultValue);
+                }
+            }
+
+            return LoweredValInfo::simple(
+                getBuilder()->emitMakeCoopVector(irType, args.getCount(), args.getBuffer()));
+        }
         else if (auto declRefType = as<DeclRefType>(type))
         {
             DeclRef<Decl> declRef = declRefType->getDeclRef();
@@ -4878,9 +4942,16 @@ struct ExprLoweringVisitorBase : public ExprVisitor<Derived, LoweredValInfo>
                         args.add(irDefaultValue);
                     }
                 }
-
-                return LoweredValInfo::simple(
-                    getBuilder()->emitMakeStruct(irType, args.getCount(), args.getBuffer()));
+                if (as<TupleType>(type))
+                {
+                    return LoweredValInfo::simple(
+                        getBuilder()->emitMakeTuple(irType, args.getCount(), args.getBuffer()));
+                }
+                else
+                {
+                    return LoweredValInfo::simple(
+                        getBuilder()->emitMakeStruct(irType, args.getCount(), args.getBuffer()));
+                }
             }
         }
 
@@ -6655,6 +6726,102 @@ struct StmtLoweringVisitor : StmtVisitor<StmtLoweringVisitor>
         }
     }
 
+    void visitStageSwitchStmt(StageSwitchStmt* stmt)
+    {
+        if (!stmt->targetCases.getCount())
+            return;
+
+        // We will lower stage switch as a normal switch statement, so they can participate in all
+        // optimizations.
+        auto builder = getBuilder();
+        startBlockIfNeeded(stmt);
+
+        // First emit code to get the current stage to switch on:
+        auto conditionVal = builder->emitGetCurrentStage();
+
+        // Remember the initial block so that we can add to it
+        // after we've collected all the `case`s
+        auto initialBlock = builder->getBlock();
+
+        // Next, create a block to use as the target for any `break` statements
+        auto breakLabel = createBlock();
+
+        // Register the `break` label so
+        // that we can find it for nested statements.
+        context->shared->breakLabels.add(stmt, breakLabel);
+
+        builder->setInsertInto(initialBlock->getParent());
+
+        // Iterate over the body of the statement, looking
+        // for `case` or `default` statements:
+        SwitchStmtInfo info;
+        info.initialBlock = initialBlock;
+        info.defaultLabel = nullptr;
+
+        Dictionary<Stmt*, IRBlock*> mapCaseStmtToBlock;
+        for (auto targetCase : stmt->targetCases)
+        {
+            IRBlock* caseBlock = nullptr;
+            if (!mapCaseStmtToBlock.tryGetValue(targetCase->body, caseBlock))
+            {
+                caseBlock = builder->emitBlock();
+                lowerStmt(context, targetCase->body);
+                mapCaseStmtToBlock.add(targetCase->body, caseBlock);
+                if (!builder->getBlock()->getTerminator())
+                    builder->emitBranch(breakLabel);
+            }
+            if (targetCase->capability == 0)
+            {
+                info.defaultLabel = caseBlock;
+            }
+            else
+            {
+                auto stage = getStageFromAtom((CapabilityAtom)targetCase->capability);
+                info.cases.add(builder->getIntValue(builder->getIntType(), (IRIntegerValue)stage));
+                info.cases.add(caseBlock);
+            }
+        }
+
+        // If the current block (the end of the last
+        // `case`) is not terminated, then terminate with a
+        // `break` operation.
+        //
+        // Double check that we aren't in the initial
+        // block, so we don't get tripped up on an
+        // empty `switch`.
+        auto curBlock = builder->getBlock();
+        if (curBlock != initialBlock)
+        {
+            // Is the block already terminated?
+            if (!curBlock->getTerminator())
+            {
+                // Not terminated, so add one.
+                builder->emitBreak(breakLabel);
+            }
+        }
+
+        // If there was no `default` statement, then the
+        // default case will just branch directly to the end.
+        auto defaultLabel = info.defaultLabel ? info.defaultLabel : breakLabel;
+
+        // Now that we've collected the cases, we are
+        // prepared to emit the `switch` instruction
+        // itself.
+        builder->setInsertInto(initialBlock);
+        builder->emitSwitch(
+            conditionVal,
+            breakLabel,
+            defaultLabel,
+            info.cases.getCount(),
+            info.cases.getBuffer());
+
+        // Finally we insert the label that a `break` will jump to
+        // (and that control flow will fall through to otherwise).
+        // This is the block that subsequent code will go into.
+        insertBlock(breakLabel);
+        context->shared->breakLabels.remove(stmt);
+    }
+
     void visitTargetSwitchStmt(TargetSwitchStmt* stmt)
     {
         if (!stmt->targetCases.getCount())
@@ -8001,24 +8168,34 @@ struct DeclLoweringVisitor : DeclVisitor<DeclLoweringVisitor, LoweredValInfo>
         // If the witness table is for a COM interface, always keep it alive.
         if (irWitnessTableBaseType->findDecoration<IRComInterfaceDecoration>())
         {
-            subBuilder->addPublicDecoration(irWitnessTable);
+            subBuilder->addHLSLExportDecoration(irWitnessTable);
         }
 
-        if (parentDecl->findModifier<HLSLExportModifier>())
+        for (auto mod : parentDecl->modifiers)
         {
-            subBuilder->addHLSLExportDecoration(irWitnessTable);
-            subBuilder->addKeepAliveDecoration(irWitnessTable);
+            if (as<HLSLExportModifier>(mod))
+            {
+                subBuilder->addHLSLExportDecoration(irWitnessTable);
+                subBuilder->addKeepAliveDecoration(irWitnessTable);
+            }
+            else if (as<AutoDiffBuiltinAttribute>(mod))
+            {
+                subBuilder->addAutoDiffBuiltinDecoration(irWitnessTable);
+            }
         }
 
         // Make sure that all the entries in the witness table have been filled in,
         // including any cases where there are sub-witness-tables for conformances
-        Dictionary<WitnessTable*, IRWitnessTable*> mapASTToIRWitnessTable;
-        lowerWitnessTable(
-            subContext,
-            inheritanceDecl->witnessTable,
-            irWitnessTable,
-            mapASTToIRWitnessTable);
-
+        bool isExplicitExtern = false;
+        if (!isImportedDecl(context, parentDecl, isExplicitExtern))
+        {
+            Dictionary<WitnessTable*, IRWitnessTable*> mapASTToIRWitnessTable;
+            lowerWitnessTable(
+                subContext,
+                inheritanceDecl->witnessTable,
+                irWitnessTable,
+                mapASTToIRWitnessTable);
+        }
         irWitnessTable->moveToEnd();
 
         return LoweredValInfo::simple(
@@ -9077,6 +9254,7 @@ struct DeclLoweringVisitor : DeclVisitor<DeclLoweringVisitor, LoweredValInfo>
                 subBuilder->addAutoDiffBuiltinDecoration(irAggType);
         }
 
+        addTargetRequirementDecorations(irAggType, decl);
 
         return LoweredValInfo::simple(finalFinishedVal);
     }
@@ -9292,10 +9470,10 @@ struct DeclLoweringVisitor : DeclVisitor<DeclLoweringVisitor, LoweredValInfo>
             // should handle propgation of value-size information from constraints
             // back to generic parameters?
             //
-            if (auto declRefType = as<DeclRefType>(constraintDecl->sub.type))
+            if (auto genParamDeclRef =
+                    isDeclRefTypeOf<GenericTypeParamDeclBase>(constraintDecl->sub.type))
             {
-                auto typeParamDeclVal =
-                    subContext->findLoweredDecl(declRefType->getDeclRef().getDecl());
+                auto typeParamDeclVal = subContext->findLoweredDecl(genParamDeclRef.getDecl());
                 SLANG_ASSERT(typeParamDeclVal && typeParamDeclVal->val);
                 subBuilder->addTypeConstraintDecoration(typeParamDeclVal->val, supType);
             }
@@ -9750,6 +9928,42 @@ struct DeclLoweringVisitor : DeclVisitor<DeclLoweringVisitor, LoweredValInfo>
         }
     }
 
+    void addTargetRequirementDecorations(IRInst* inst, Decl* decl)
+    {
+        // If this declaration requires certain GLSL extension (or a particular GLSL version)
+        // for it to be usable, then declare that here. Similarly for SPIR-V or CUDA
+        //
+        // TODO: We should wrap this an `SpecializedForTargetModifier` together into a single
+        // case for enumerating the "capabilities" that a declaration requires.
+        //
+        for (auto extensionMod : decl->getModifiersOfType<RequiredGLSLExtensionModifier>())
+        {
+            getBuilder()->addRequireGLSLExtensionDecoration(
+                inst,
+                extensionMod->extensionNameToken.getContent());
+        }
+        for (auto versionMod : decl->getModifiersOfType<RequiredGLSLVersionModifier>())
+        {
+            getBuilder()->addRequireGLSLVersionDecoration(
+                inst,
+                Int(getIntegerLiteralValue(versionMod->versionNumberToken)));
+        }
+        for (auto versionMod : decl->getModifiersOfType<RequiredSPIRVVersionModifier>())
+        {
+            getBuilder()->addRequireSPIRVVersionDecoration(inst, versionMod->version);
+        }
+        for (auto extensionMod : decl->getModifiersOfType<RequiredWGSLExtensionModifier>())
+        {
+            getBuilder()->addRequireWGSLExtensionDecoration(
+                inst,
+                extensionMod->extensionNameToken.getContent());
+        }
+        for (auto versionMod : decl->getModifiersOfType<RequiredCUDASMVersionModifier>())
+        {
+            getBuilder()->addRequireCUDASMVersionDecoration(inst, versionMod->version);
+        }
+    }
+
     void addBitFieldAccessorDecorations(IRInst* irFunc, Decl* decl)
     {
         // If this is an accessor and the parent is describing some bitfield,
@@ -9900,6 +10114,24 @@ struct DeclLoweringVisitor : DeclVisitor<DeclLoweringVisitor, LoweredValInfo>
         {
             addNameHint(context, inst, "this");
         }
+    }
+
+    IRFloatLit* _getFloatFromAttribute(IRBuilder* builder, Attribute* attrib, Index index = 0)
+    {
+        SLANG_ASSERT(attrib->args.getCount() > index);
+        Expr* expr = attrib->args[index];
+
+        if (auto floatLitExpr = as<FloatingPointLiteralExpr>(expr))
+        {
+            return as<IRFloatLit>(
+                builder->getFloatValue(builder->getFloatType(), floatLitExpr->value));
+        }
+
+        auto intLitExpr = as<IntegerLiteralExpr>(expr);
+        SLANG_ASSERT(intLitExpr);
+        return as<IRFloatLit>(builder->getFloatValue(
+            builder->getFloatType(),
+            (IRFloatingPointValue)(intLitExpr->value)));
     }
 
     IRIntLit* _getIntLitFromAttribute(IRBuilder* builder, Attribute* attrib, Index index = 0)
@@ -10246,7 +10478,10 @@ struct DeclLoweringVisitor : DeclVisitor<DeclLoweringVisitor, LoweredValInfo>
                 }
 
                 // Used for diagnostics
-                getBuilder()->addConstructorDecoration(irFunc, constructorDecl->isSynthesized);
+                getBuilder()->addConstructorDecoration(
+                    irFunc,
+                    constructorDecl->containsFlavor(
+                        ConstructorDecl::ConstructorFlavor::SynthesizedDefault));
             }
 
             // We lower whatever statement was stored on the declaration
@@ -10315,6 +10550,8 @@ struct DeclLoweringVisitor : DeclVisitor<DeclLoweringVisitor, LoweredValInfo>
         addTargetIntrinsicDecorations(subContext, irFunc, decl);
 
         addCatchAllIntrinsicDecorationIfNeeded(irFunc, decl);
+
+        addTargetRequirementDecorations(irFunc, decl);
 
         bool isInline = false;
 
@@ -10430,6 +10667,11 @@ struct DeclLoweringVisitor : DeclVisitor<DeclLoweringVisitor, LoweredValInfo>
             {
                 IRStringLit* stringLit = _getStringLitFromAttribute(getBuilder(), outputTopAttr);
                 getBuilder()->addDecoration(irFunc, kIROp_OutputTopologyDecoration, stringLit);
+            }
+            else if (auto maxTessFactortAttr = as<MaxTessFactorAttribute>(modifier))
+            {
+                IRFloatLit* floatLit = _getFloatFromAttribute(getBuilder(), maxTessFactortAttr);
+                getBuilder()->addDecoration(irFunc, kIROp_MaxTessFactorDecoration, floatLit);
             }
             else if (auto outputCtrlPtAttr = as<OutputControlPointsAttribute>(modifier))
             {
@@ -10554,6 +10796,10 @@ struct DeclLoweringVisitor : DeclVisitor<DeclLoweringVisitor, LoweredValInfo>
                     Int(getIntegerLiteralValue(versionMod->versionNumberToken)));
             else if (auto spvVersion = as<RequiredSPIRVVersionModifier>(modifier))
                 getBuilder()->addRequireSPIRVVersionDecoration(irFunc, spvVersion->version);
+            else if (auto wgslExtensionMod = as<RequiredWGSLExtensionModifier>(modifier))
+                getBuilder()->addRequireWGSLExtensionDecoration(
+                    irFunc,
+                    wgslExtensionMod->extensionNameToken.getContent());
             else if (auto cudasmVersion = as<RequiredCUDASMVersionModifier>(modifier))
                 getBuilder()->addRequireCUDASMVersionDecoration(irFunc, cudasmVersion->version);
             else if (as<NonDynamicUniformAttribute>(modifier))
@@ -11180,50 +11426,6 @@ static void lowerFrontEndEntryPointToIR(
             entryPointName->text.getUnownedSlice(),
             moduleName.getUnownedSlice());
     }
-
-    // Go through the entry point parameters creating decorations from layout as appropriate
-    // But only if this is a definition not a declaration
-    if (isDefinition(instToDecorate))
-    {
-        FilteredMemberList<ParamDecl> params = entryPointFuncDecl->getParameters();
-
-        IRGlobalValueWithParams* valueWithParams = as<IRGlobalValueWithParams>(instToDecorate);
-        if (valueWithParams)
-        {
-            IRParam* irParam = valueWithParams->getFirstParam();
-
-            for (auto param : params)
-            {
-                if (auto modifier =
-                        param->findModifier<HLSLGeometryShaderInputPrimitiveTypeModifier>())
-                {
-                    IROp op = kIROp_Invalid;
-
-                    if (as<HLSLTriangleModifier>(modifier))
-                        op = kIROp_TriangleInputPrimitiveTypeDecoration;
-                    else if (as<HLSLPointModifier>(modifier))
-                        op = kIROp_PointInputPrimitiveTypeDecoration;
-                    else if (as<HLSLLineModifier>(modifier))
-                        op = kIROp_LineInputPrimitiveTypeDecoration;
-                    else if (as<HLSLLineAdjModifier>(modifier))
-                        op = kIROp_LineAdjInputPrimitiveTypeDecoration;
-                    else if (as<HLSLTriangleAdjModifier>(modifier))
-                        op = kIROp_TriangleAdjInputPrimitiveTypeDecoration;
-
-                    if (op != kIROp_Invalid)
-                    {
-                        builder->addDecoration(irParam, op);
-                    }
-                    else
-                    {
-                        SLANG_UNEXPECTED("unhandled primitive type");
-                    }
-                }
-
-                irParam = irParam->getNextParam();
-            }
-        }
-    }
 }
 
 static void lowerProgramEntryPointToIR(
@@ -11343,6 +11545,8 @@ RefPtr<IRModule> generateIRForTranslationUnit(
     IRGenContext* context = &contextStorage;
 
     RefPtr<IRModule> module = IRModule::create(session);
+
+    module->setName(translationUnit->getModuleDecl()->getName());
 
     IRBuilder builderStorage(module);
     IRBuilder* builder = &builderStorage;
@@ -11612,6 +11816,8 @@ RefPtr<IRModule> generateIRForTranslationUnit(
         stripOptions.stripSourceLocs = false;
         stripFrontEndOnlyInstructions(module, stripOptions);
 
+        stripImportedWitnessTable(module);
+
         // Stripping out decorations could leave some dead code behind
         // in the module, and in some cases that extra code is also
         // undesirable (e.g., the string literals referenced by name-hint
@@ -11655,6 +11861,8 @@ RefPtr<IRModule> generateIRForTranslationUnit(
             &writer);
     }
 
+    module->buildMangledNameToGlobalInstMap();
+
     return module;
 }
 
@@ -11692,7 +11900,7 @@ struct SpecializedComponentTypeIRGenContext : ComponentTypeVisitor
         context->irBuilder = builder;
 
         componentType->acceptVisitor(this, nullptr);
-
+        module->buildMangledNameToGlobalInstMap();
         return module;
     }
 
@@ -11848,6 +12056,7 @@ struct TypeConformanceIRGenContext
         {
             builder->addSequentialIDDecoration(witness, conformanceIdOverride);
         }
+        module->buildMangledNameToGlobalInstMap();
         return module;
     }
 };
@@ -12209,7 +12418,9 @@ RefPtr<IRModule> TargetProgram::createIRModuleForLayout(DiagnosticSink* sink)
         // has been emitted to this module, so that we will have something
         // to decorate.
         //
-        auto irVar = getSimpleVal(context, ensureDecl(context, varDecl.getDecl()));
+        auto irVar = materialize(context, ensureDecl(context, varDecl.getDecl())).val;
+        if (!irVar)
+            SLANG_UNEXPECTED("unhandled value flavor");
 
         auto irLayout = lowerVarLayout(context, varLayout);
 
@@ -12313,7 +12524,7 @@ RefPtr<IRModule> TargetProgram::createIRModuleForLayout(DiagnosticSink* sink)
         // Eliminate any dead code
         eliminateDeadCode(irModule, options);
     }
-
+    irModule->buildMangledNameToGlobalInstMap();
     m_irModuleForLayout = irModule;
     return irModule;
 }

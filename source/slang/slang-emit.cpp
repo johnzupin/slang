@@ -52,6 +52,7 @@
 #include "slang-ir-insts.h"
 #include "slang-ir-layout.h"
 #include "slang-ir-legalize-array-return-type.h"
+#include "slang-ir-legalize-binary-operator.h"
 #include "slang-ir-legalize-global-values.h"
 #include "slang-ir-legalize-image-subscript.h"
 #include "slang-ir-legalize-mesh-outputs.h"
@@ -66,6 +67,7 @@
 #include "slang-ir-lower-bit-cast.h"
 #include "slang-ir-lower-buffer-element-type.h"
 #include "slang-ir-lower-combined-texture-sampler.h"
+#include "slang-ir-lower-coopvec.h"
 #include "slang-ir-lower-dynamic-resource-heap.h"
 #include "slang-ir-lower-generics.h"
 #include "slang-ir-lower-glsl-ssbo-types.h"
@@ -89,10 +91,12 @@
 #include "slang-ir-specialize-buffer-load-arg.h"
 #include "slang-ir-specialize-matrix-layout.h"
 #include "slang-ir-specialize-resources.h"
+#include "slang-ir-specialize-stage-switch.h"
 #include "slang-ir-specialize.h"
 #include "slang-ir-ssa-simplification.h"
 #include "slang-ir-ssa.h"
 #include "slang-ir-string-hash.h"
+#include "slang-ir-strip-debug-info.h"
 #include "slang-ir-strip-default-construct.h"
 #include "slang-ir-strip-legalization-insts.h"
 #include "slang-ir-synthesize-active-mask.h"
@@ -300,6 +304,7 @@ struct LinkingAndOptimizationOptions
 //
 struct RequiredLoweringPassSet
 {
+    bool debugInfo;
     bool resultType;
     bool optionalType;
     bool combinedTextureSamplers;
@@ -319,6 +324,7 @@ struct RequiredLoweringPassSet
     bool dynamicResource;
     bool dynamicResourceHeap;
     bool resolveVaryingInputRef;
+    bool specializeStageSwitch;
 };
 
 // Scan the IR module and determine which lowering/legalization passes are needed based
@@ -331,6 +337,13 @@ void calcRequiredLoweringPassSet(
 {
     switch (inst->getOp())
     {
+    case kIROp_DebugValue:
+    case kIROp_DebugVar:
+    case kIROp_DebugLine:
+    case kIROp_DebugLocationDecoration:
+    case kIROp_DebugSource:
+        result.debugInfo = true;
+        break;
     case kIROp_ResultType:
         result.resultType = true;
         break;
@@ -434,6 +447,9 @@ void calcRequiredLoweringPassSet(
     case kIROp_ResolveVaryingInputRef:
         result.resolveVaryingInputRef = true;
         break;
+    case kIROp_GetCurrentStage:
+        result.specializeStageSwitch = true;
+        break;
     }
     if (!result.generics || !result.existentialTypeLayout)
     {
@@ -456,6 +472,31 @@ void calcRequiredLoweringPassSet(
     for (auto child : inst->getDecorationsAndChildren())
     {
         calcRequiredLoweringPassSet(result, codeGenContext, child);
+    }
+}
+
+void diagnoseCallStack(IRInst* inst, DiagnosticSink* sink)
+{
+    static const int maxDepth = 5;
+    for (int i = 0; i < maxDepth; i++)
+    {
+        auto func = getParentFunc(inst);
+        if (!func)
+            return;
+        bool shouldContinue = false;
+        for (auto use = func->firstUse; use; use = use->nextUse)
+        {
+            auto user = use->getUser();
+            if (auto call = as<IRCall>(user))
+            {
+                sink->diagnose(call, Diagnostics::seeCallOfFunc, func);
+                inst = call;
+                shouldContinue = true;
+                break;
+            }
+        }
+        if (!shouldContinue)
+            return;
     }
 }
 
@@ -482,6 +523,7 @@ bool checkStaticAssert(IRInst* inst, DiagnosticSink* sink)
                     {
                         sink->diagnose(inst, Diagnostics::staticAssertionFailureWithoutMessage);
                     }
+                    diagnoseCallStack(inst, sink);
                 }
             }
             else
@@ -583,6 +625,7 @@ Result linkAndOptimizeIR(
     auto target = codeGenContext->getTargetFormat();
     auto targetRequest = codeGenContext->getTargetReq();
     auto targetProgram = codeGenContext->getTargetProgram();
+    auto targetCompilerOptions = targetRequest->getOptionSet();
 
     // Get the artifact desc for the target
     const auto artifactDesc = ArtifactDescUtil::makeDescForCompileTarget(asExternal(target));
@@ -613,6 +656,13 @@ Result linkAndOptimizeIR(
     // Scan the IR module and determine which lowering/legalization passes are needed.
     RequiredLoweringPassSet requiredLoweringPassSet = {};
     calcRequiredLoweringPassSet(requiredLoweringPassSet, codeGenContext, irModule->getModuleInst());
+
+    // Debug info is added by the front-end, and therefore needs to be stripped out by targets that
+    // opt out of debug info.
+    if (requiredLoweringPassSet.debugInfo &&
+        (targetCompilerOptions.getIntOption(CompilerOptionName::DebugInformation) ==
+         SLANG_DEBUG_INFO_LEVEL_NONE))
+        stripDebugInfo(irModule);
 
     if (!isKhronosTarget(targetRequest) && requiredLoweringPassSet.glslSSBO)
         lowerGLSLShaderStorageBufferObjectsToStructuredBuffers(irModule, sink);
@@ -1009,12 +1059,26 @@ Result linkAndOptimizeIR(
         cleanupGenerics(targetProgram, irModule, sink);
     dumpIRIfEnabled(codeGenContext, irModule, "AFTER-LOWER-GENERICS");
 
+    // After dynamic dispatch logic is resolved into ordinary function calls,
+    // we can now run our stage specialization logic.
+    if (requiredLoweringPassSet.specializeStageSwitch)
+        specializeStageSwitch(irModule);
     if (sink->getErrorCount() != 0)
         return SLANG_FAIL;
 #if 0
     dumpIRIfEnabled(codeGenContext, irModule, "SPECIALIZED");
 #endif
     validateIRModuleIfEnabled(codeGenContext, irModule);
+
+    switch (target)
+    {
+    case CodeGenTarget::SPIRV:
+    case CodeGenTarget::SPIRVAssembly:
+    case CodeGenTarget::HLSL:
+        break;
+    default:
+        lowerCooperativeVectors(irModule, sink);
+    }
 
     // Inline calls to any functions marked with [__unsafeInlineEarly] or [ForceInline].
     performForceInlining(irModule);
@@ -1372,10 +1436,10 @@ Result linkAndOptimizeIR(
     case CodeGenTarget::SPIRV:
     case CodeGenTarget::SPIRVAssembly:
         {
-            GLSLExtensionTracker glslExtensionTracker;
-            GLSLExtensionTracker* glslExtensionTrackerPtr =
+            ShaderExtensionTracker glslExtensionTracker;
+            ShaderExtensionTracker* glslExtensionTrackerPtr =
                 options.sourceEmitter
-                    ? as<GLSLExtensionTracker>(options.sourceEmitter->getExtensionTracker())
+                    ? as<ShaderExtensionTracker>(options.sourceEmitter->getExtensionTracker())
                     : &glslExtensionTracker;
 
 #if 0
@@ -1432,6 +1496,10 @@ Result linkAndOptimizeIR(
         floatNonUniformResourceIndex(irModule, NonUniformResourceIndexFloatMode::Textual);
     }
 
+    if (isD3DTarget(targetRequest) || isKhronosTarget(targetRequest) ||
+        isWGPUTarget(targetRequest) || isMetalTarget(targetRequest))
+        legalizeLogicalAndOr(irModule->getModuleInst());
+
     // Legalize non struct parameters that are expected to be structs for HLSL.
     if (isD3DTarget(targetRequest))
         legalizeNonStructParameterToStructForHLSL(irModule);
@@ -1476,14 +1544,15 @@ Result linkAndOptimizeIR(
     {
     default:
         break;
+    case CodeGenTarget::HLSL:
     case CodeGenTarget::GLSL:
     case CodeGenTarget::WGSL:
-        moveGlobalVarInitializationToEntryPoints(irModule);
+        moveGlobalVarInitializationToEntryPoints(irModule, targetProgram);
         break;
     // For SPIR-V to SROA across 2 entry-points a value must not be a global
     case CodeGenTarget::SPIRV:
     case CodeGenTarget::SPIRVAssembly:
-        moveGlobalVarInitializationToEntryPoints(irModule);
+        moveGlobalVarInitializationToEntryPoints(irModule, targetProgram);
         if (targetProgram->getOptionSet().getBoolOption(
                 CompilerOptionName::EnableExperimentalPasses))
             introduceExplicitGlobalContext(irModule, target);
@@ -1494,7 +1563,7 @@ Result linkAndOptimizeIR(
     case CodeGenTarget::Metal:
     case CodeGenTarget::CPPSource:
     case CodeGenTarget::CUDASource:
-        moveGlobalVarInitializationToEntryPoints(irModule);
+        moveGlobalVarInitializationToEntryPoints(irModule, targetProgram);
         introduceExplicitGlobalContext(irModule, target);
         if (target == CodeGenTarget::CPPSource)
         {

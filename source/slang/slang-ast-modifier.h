@@ -218,6 +218,15 @@ class RequiredSPIRVVersionModifier : public Modifier
 };
 
 // A modifier to tag something as an intrinsic that requires
+// a certain WGSL extension to be enabled when used
+class RequiredWGSLExtensionModifier : public Modifier
+{
+    SLANG_AST_CLASS(RequiredWGSLExtensionModifier)
+
+    Token extensionNameToken;
+};
+
+// A modifier to tag something as an intrinsic that requires
 // a certain CUDA SM version to be enabled when used. Specified as "major.minor"
 class RequiredCUDASMVersionModifier : public Modifier
 {
@@ -1270,10 +1279,10 @@ class ImplicitConversionModifier : public Modifier
     SLANG_AST_CLASS(ImplicitConversionModifier)
 
     // The conversion cost, used to rank conversions
-    ConversionCost cost;
+    ConversionCost cost = kConversionCost_None;
 
     // A builtin identifier for identifying conversions that need special treatment.
-    BuiltinConversionKind builtinConversionKind;
+    BuiltinConversionKind builtinConversionKind = kBuiltinConversion_Unknown;
 };
 
 class FormatAttribute : public Attribute

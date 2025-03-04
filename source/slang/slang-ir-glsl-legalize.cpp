@@ -1,7 +1,7 @@
 // slang-ir-glsl-legalize.cpp
 #include "slang-ir-glsl-legalize.h"
 
-#include "slang-glsl-extension-tracker.h"
+#include "slang-extension-tracker.h"
 #include "slang-ir-clone.h"
 #include "slang-ir-inst-pass-base.h"
 #include "slang-ir-insts.h"
@@ -236,6 +236,9 @@ struct GLSLSystemValueInfo
 
     // The kind of the system value that requires special treatment.
     GLSLSystemValueKind kind = GLSLSystemValueKind::General;
+
+    // The target builtin name.
+    IRTargetBuiltinVarName targetVarName = IRTargetBuiltinVarName::Unknown;
 };
 
 static void leafAddressesImpl(List<IRInst*>& ret, const ScalarizedVal& v)
@@ -279,10 +282,11 @@ List<IRInst*> ScalarizedVal::leafAddresses()
 struct GLSLLegalizationContext
 {
     Session* session;
-    GLSLExtensionTracker* glslExtensionTracker;
+    ShaderExtensionTracker* glslExtensionTracker;
     DiagnosticSink* sink;
     Stage stage;
     IRFunc* entryPointFunc;
+    Dictionary<IRTargetBuiltinVarName, IRInst*> builtinVarMap;
 
     /// This dictionary stores all bindings of 'VaryingIn/VaryingOut'. We assume 'space' is 0.
     Dictionary<LayoutResourceKind, UIntSet> usedBindingIndex;
@@ -414,7 +418,7 @@ GLSLSystemValueInfo* getGLSLSystemValueInfo(
     char const* outerArrayName = nullptr;
     int arrayIndex = -1;
     GLSLSystemValueKind systemValueKind = GLSLSystemValueKind::General;
-
+    IRTargetBuiltinVarName targetVarName = IRTargetBuiltinVarName::Unknown;
     auto semanticInst = varLayout->findSystemValueSemanticAttr();
     if (!semanticInst)
         return nullptr;
@@ -621,6 +625,9 @@ GLSLSystemValueInfo* getGLSLSystemValueInfo(
 
         requiredType = builder->getBasicType(BaseType::Int);
         name = "gl_InstanceIndex";
+        targetVarName = IRTargetBuiltinVarName::HlslInstanceID;
+        context->requireSPIRVVersion(SemanticVersion(1, 3));
+        context->requireGLSLExtension(toSlice("GL_ARB_shader_draw_parameters"));
     }
     else if (semanticName == "sv_isfrontface")
     {
@@ -869,6 +876,7 @@ GLSLSystemValueInfo* getGLSLSystemValueInfo(
         name = "gl_BaseInstance";
     }
 
+    inStorage->targetVarName = targetVarName;
     if (name)
     {
         inStorage->name = name;
@@ -975,6 +983,12 @@ void createVarLayoutForLegalizedGlobalParam(
             break;
         default:
             break;
+        }
+
+        if (systemValueInfo->targetVarName != IRTargetBuiltinVarName::Unknown)
+        {
+            builder->addTargetBuiltinVarDecoration(globalParam, systemValueInfo->targetVarName);
+            context->builtinVarMap[systemValueInfo->targetVarName] = globalParam;
         }
     }
 }
@@ -1261,8 +1275,8 @@ ScalarizedVal createSimpleGLSLGlobalVarying(
         auto systemSemantic = inVarLayout->findAttr<IRSystemValueSemanticAttr>();
         // Validate the system value, convert to a regular parameter if this is not a valid system
         // value for a given target.
-        if (systemSemantic && isSPIRV(codeGenContext->getTargetFormat()) &&
-            systemSemantic->getName().caseInsensitiveEquals(UnownedStringSlice("sv_instanceid")) &&
+        if (systemSemantic && systemValueInfo && isSPIRV(codeGenContext->getTargetFormat()) &&
+            systemValueInfo->targetVarName == IRTargetBuiltinVarName::HlslInstanceID &&
             ((stage == Stage::Fragment) ||
              (stage == Stage::Vertex &&
               inVarLayout->usesResourceKind(LayoutResourceKind::VaryingOutput))))
@@ -1287,6 +1301,7 @@ ScalarizedVal createSimpleGLSLGlobalVarying(
             newVarLayout->sourceLoc = inVarLayout->sourceLoc;
 
             inVarLayout->replaceUsesWith(newVarLayout);
+            systemValueInfo->targetVarName = IRTargetBuiltinVarName::Unknown;
         }
     }
 
@@ -1527,6 +1542,43 @@ ScalarizedVal createSimpleGLSLGlobalVarying(
                 typeAdapter->val = val;
 
                 val = ScalarizedVal::typeAdapter(typeAdapter);
+            }
+
+            if (auto requiredArrayType = as<IRArrayTypeBase>(systemValueInfo->requiredType))
+            {
+                // Find first array declarator and handle size mismatch
+                for (auto dd = declarator; dd; dd = dd->next)
+                {
+                    if (dd->flavor != GlobalVaryingDeclarator::Flavor::array)
+                        continue;
+
+                    // Compare the array size
+                    auto declaredArraySize = dd->elementCount;
+                    auto requiredArraySize = requiredArrayType->getElementCount();
+                    if (declaredArraySize == requiredArraySize)
+                        break;
+
+                    auto toSize = getIntVal(requiredArraySize);
+                    auto fromSize = getIntVal(declaredArraySize);
+                    if (toSize < fromSize)
+                    {
+                        context->getSink()->diagnose(
+                            inVarLayout,
+                            Diagnostics::cannotConvertArrayOfSmallerToLargerSize,
+                            fromSize,
+                            toSize);
+                    }
+
+                    // Array sizes differ, need type adapter
+                    RefPtr<ScalarizedTypeAdapterValImpl> typeAdapter =
+                        new ScalarizedTypeAdapterValImpl;
+                    typeAdapter->actualType = systemValueInfo->requiredType;
+                    typeAdapter->pretendType = builder->getArrayType(inType, declaredArraySize);
+                    typeAdapter->val = val;
+
+                    val = ScalarizedVal::typeAdapter(typeAdapter);
+                    break;
+                }
             }
         }
     }
@@ -1970,6 +2022,42 @@ ScalarizedVal adaptType(IRBuilder* builder, IRInst* val, IRType* toType, IRType*
                 fromArray->getElementType(),
                 val,
                 builder->getIntValue(builder->getIntType(), 0));
+        }
+        else if (auto toArray = as<IRArrayTypeBase>(toType))
+        {
+            // If array sizes differ, we need to reshape the array
+            if (fromArray->getElementCount() != toArray->getElementCount())
+            {
+                List<IRInst*> elements;
+
+                // Get array sizes once
+                auto fromSize = getIntVal(fromArray->getElementCount());
+                auto toSize = getIntVal(toArray->getElementCount());
+                SLANG_ASSERT(fromSize <= toSize);
+
+                // Extract elements one at a time up to the source array size
+                for (Index i = 0; i < fromSize; i++)
+                {
+                    auto element = builder->emitElementExtract(
+                        fromArray->getElementType(),
+                        val,
+                        builder->getIntValue(builder->getIntType(), i));
+                    elements.add(element);
+                }
+
+                if (fromSize < toSize)
+                {
+                    // Fill remaining elements with default value up to target size
+                    auto elementType = toArray->getElementType();
+                    auto defaultValue = builder->emitDefaultConstruct(elementType);
+                    for (Index i = fromSize; i < toSize; i++)
+                    {
+                        elements.add(defaultValue);
+                    }
+                }
+
+                val = builder->emitMakeArray(toType, elements.getCount(), elements.getBuffer());
+            }
         }
     }
     // TODO: actually consider what needs to go on here...
@@ -2923,6 +3011,22 @@ void tryReplaceUsesOfStageInput(
                                     fieldVal = element.val;
                                     break;
                                 }
+                                if (auto tupleValType =
+                                        as<ScalarizedTupleValImpl>(element.val.impl))
+                                {
+                                    for (auto tupleElement : tupleValType->elements)
+                                    {
+                                        if (tupleElement.key == fieldKey)
+                                        {
+                                            fieldVal = tupleElement.val;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (fieldVal.flavor != ScalarizedVal::Flavor::none)
+                                {
+                                    break;
+                                }
                             }
                             if (fieldVal.flavor != ScalarizedVal::Flavor::none)
                             {
@@ -3290,46 +3394,55 @@ void legalizeEntryPointParameterForGLSL(
             if (dec->getOp() != kIROp_GlobalVariableShadowingGlobalParameterDecoration)
                 continue;
             auto globalVar = dec->getOperand(0);
-            auto key = dec->getOperand(1);
-            IRInst* realGlobalVar = nullptr;
-            if (globalValue.flavor != ScalarizedVal::Flavor::tuple)
-                continue;
-            if (auto tupleVal = as<ScalarizedTupleValImpl>(globalValue.impl))
+            auto globalVarType = cast<IRPtrTypeBase>(globalVar->getDataType())->getValueType();
+            if (as<IRStructType>(globalVarType))
             {
-                for (auto elem : tupleVal->elements)
-                {
-                    if (elem.key == key)
-                    {
-                        realGlobalVar = elem.val.irValue;
-                        break;
-                    }
-                }
+                tryReplaceUsesOfStageInput(context, globalValue, globalVar);
             }
-            SLANG_ASSERT(realGlobalVar);
+            else
+            {
 
-            // Remove all stores into the global var introduced during
-            // the initial glsl global var translation pass since we are
-            // going to replace the global var with a pointer to the real
-            // input, and it makes no sense to store values into such real
-            // input locations.
-            traverseUses(
-                globalVar,
-                [&](IRUse* use)
+                auto key = dec->getOperand(1);
+                IRInst* realGlobalVar = nullptr;
+                if (globalValue.flavor != ScalarizedVal::Flavor::tuple)
+                    continue;
+                if (auto tupleVal = as<ScalarizedTupleValImpl>(globalValue.impl))
                 {
-                    auto user = use->getUser();
-                    if (auto store = as<IRStore>(user))
+                    for (auto elem : tupleVal->elements)
                     {
-                        if (store->getPtrUse() == use)
+                        if (elem.key == key)
                         {
-                            store->removeAndDeallocate();
+                            realGlobalVar = elem.val.irValue;
+                            break;
                         }
                     }
-                });
-            // we will be replacing uses of `globalVarToReplace`. We need
-            // globalVarToReplaceNextUse to catch the next use before it is removed from the
-            // list of uses.
-            globalVar->replaceUsesWith(realGlobalVar);
-            globalVar->removeAndDeallocate();
+                }
+                SLANG_ASSERT(realGlobalVar);
+
+                // Remove all stores into the global var introduced during
+                // the initial glsl global var translation pass since we are
+                // going to replace the global var with a pointer to the real
+                // input, and it makes no sense to store values into such real
+                // input locations.
+                traverseUses(
+                    globalVar,
+                    [&](IRUse* use)
+                    {
+                        auto user = use->getUser();
+                        if (auto store = as<IRStore>(user))
+                        {
+                            if (store->getPtrUse() == use)
+                            {
+                                store->removeAndDeallocate();
+                            }
+                        }
+                    });
+                // we will be replacing uses of `globalVarToReplace`. We need
+                // globalVarToReplaceNextUse to catch the next use before it is removed from the
+                // list of uses.
+                globalVar->replaceUsesWith(realGlobalVar);
+                globalVar->removeAndDeallocate();
+            }
         }
     }
     else
@@ -3648,13 +3761,67 @@ ScalarizedVal legalizeEntryPointReturnValueForGLSL(
     return result;
 }
 
+void legalizeTargetBuiltinVar(GLSLLegalizationContext& context)
+{
+    List<KeyValuePair<IRTargetBuiltinVarName, IRInst*>> workItems;
+    for (auto [builtinVarName, varInst] : context.builtinVarMap)
+    {
+        if (builtinVarName == IRTargetBuiltinVarName::HlslInstanceID)
+        {
+            workItems.add(KeyValuePair(builtinVarName, varInst));
+        }
+    }
+
+    auto getOrCreateBuiltinVar = [&](IRTargetBuiltinVarName name, IRType* type)
+    {
+        if (auto var = context.builtinVarMap.tryGetValue(name))
+            return *var;
+        IRBuilder builder(context.entryPointFunc);
+        builder.setInsertBefore(context.entryPointFunc);
+        IRInst* var = builder.createGlobalParam(type);
+        builder.addTargetBuiltinVarDecoration(var, name);
+        return var;
+    };
+    for (auto& kv : workItems)
+    {
+        auto builtinVarName = kv.key;
+        auto varInst = kv.value;
+
+        // Repalce SV_InstanceID with gl_InstanceIndex - gl_BaseInstance.
+        if (builtinVarName == IRTargetBuiltinVarName::HlslInstanceID)
+        {
+            auto instanceIndex = getOrCreateBuiltinVar(
+                IRTargetBuiltinVarName::SpvInstanceIndex,
+                varInst->getDataType());
+            auto baseInstance = getOrCreateBuiltinVar(
+                IRTargetBuiltinVarName::SpvBaseInstance,
+                varInst->getDataType());
+            traverseUses(
+                varInst,
+                [&](IRUse* use)
+                {
+                    auto user = use->getUser();
+                    if (user->getOp() == kIROp_Load)
+                    {
+                        IRBuilder builder(use->getUser());
+                        builder.setInsertBefore(use->getUser());
+                        auto sub = builder.emitSub(
+                            tryGetPointedToType(&builder, varInst->getDataType()),
+                            builder.emitLoad(instanceIndex),
+                            builder.emitLoad(baseInstance));
+                        user->replaceUsesWith(sub);
+                    }
+                });
+        }
+    }
+}
 
 void legalizeEntryPointForGLSL(
     Session* session,
     IRModule* module,
     IRFunc* func,
     CodeGenContext* codeGenContext,
-    GLSLExtensionTracker* glslExtensionTracker)
+    ShaderExtensionTracker* glslExtensionTracker)
 {
     auto entryPointDecor = func->findDecoration<IREntryPointDecoration>();
     SLANG_ASSERT(entryPointDecor);
@@ -3722,7 +3889,8 @@ void legalizeEntryPointForGLSL(
 
     // Rename the entrypoint to "main" to conform to GLSL standard,
     // if the compile options require us to do it.
-    if (!shouldUseOriginalEntryPointName(codeGenContext))
+    if (!shouldUseOriginalEntryPointName(codeGenContext) &&
+        codeGenContext->getEntryPointCount() == 1)
     {
         entryPointDecor->setName(builder.getStringValue(UnownedStringSlice("main")));
     }
@@ -3838,6 +4006,11 @@ void legalizeEntryPointForGLSL(
             value.globalParam->setFullType(sizedArrayType);
         }
     }
+
+    // Some system value vars can't be mapped 1:1 to a GLSL/Vulkan builtin,
+    // for example, SV_InstanceID should map to gl_InstanceIndex - gl_BaseInstance,
+    // we will replace these builtins with additional compute logic here.
+    legalizeTargetBuiltinVar(context);
 }
 
 void decorateModuleWithSPIRVVersion(IRModule* module, SemanticVersion spirvVersion)
@@ -3885,7 +4058,7 @@ void legalizeEntryPointsForGLSL(
     IRModule* module,
     const List<IRFunc*>& funcs,
     CodeGenContext* context,
-    GLSLExtensionTracker* glslExtensionTracker)
+    ShaderExtensionTracker* glslExtensionTracker)
 {
     for (auto func : funcs)
     {

@@ -524,6 +524,13 @@ interface ITexelElement
     __init(Element x);
 }
 
+extension<T:__BuiltinArithmeticType> T : ITexelElement
+{
+    typealias Element = T;
+    static const int elementCount = 1;
+    __intrinsic_op(0) __init(Element x);
+}
+
 ${{{
 // Scalar types that can be used as texel element.
 const char* texeElementScalarTypes[] = {
@@ -539,12 +546,6 @@ const char* texeElementScalarTypes[] = {
 for (auto elementType : texeElementScalarTypes)
 {
 }}}
-extension $(elementType) : ITexelElement
-{
-    typealias Element = $(elementType);
-    static const int elementCount = 1;
-    __intrinsic_op(0) __init(Element x);
-}
 extension<int N> vector<$(elementType), N> : ITexelElement
 {
     typealias Element = $(elementType);
@@ -4530,6 +4531,22 @@ __intrinsic_op($(kIROp_ByteAddressBufferStore))
 [require(cpp_cuda_glsl_hlsl_metal_spirv, byteaddressbuffer_rw)]
 void __byteAddressBufferStore<T>(RasterizerOrderedByteAddressBuffer buffer, int offset, int alignment, T value);
 
+__intrinsic_op($(kIROp_GetUntypedBufferPtr))
+[require(spirv, byteaddressbuffer)]
+Ptr<uint[]> __getByteAddressBufferPtr(ByteAddressBuffer buffer);
+
+__intrinsic_op($(kIROp_GetUntypedBufferPtr))
+[require(spirv, byteaddressbuffer_rw)]
+Ptr<uint[]> __getByteAddressBufferPtr(RWByteAddressBuffer buffer);
+
+__intrinsic_op($(kIROp_GetStructuredBufferPtr))
+[require(spirv, structuredbuffer)]
+Ptr<T[]> __getStructuredBufferPtr<T>(StructuredBuffer<T> buffer);
+
+__intrinsic_op($(kIROp_GetStructuredBufferPtr))
+[require(spirv, structuredbuffer_rw)]
+Ptr<T[]> __getStructuredBufferPtr<T>(RWStructuredBuffer<T> buffer);
+
 /**
 Represents an opaque handle to a read-only structured buffer allocated in global memory.
 A structured buffer can be viewed as an array of the specified element type.
@@ -6212,7 +6229,9 @@ bool all(vector<T,N> x)
     case hlsl:
         __intrinsic_asm "all";
     case metal:
-        __intrinsic_asm "all";
+        if (__isBool<T>())
+            __intrinsic_asm "all";
+        __intrinsic_asm "all(bool$N0($0))";
     case glsl:
         __intrinsic_asm "all(bvec$N0($0))";
     case spirv:
@@ -6240,7 +6259,9 @@ bool all(vector<T,N> x)
             };
         }
     case wgsl:
-        __intrinsic_asm "all";
+        if (__isBool<T>())
+            __intrinsic_asm "all";
+        __intrinsic_asm "all(vec$N0<bool>($0))";
     default:
         bool result = true;
         for(int i = 0; i < N; ++i)
@@ -9762,7 +9783,7 @@ void __subgroupBarrier()
     case glsl: __intrinsic_asm "subgroupBarrier";
     case hlsl: __intrinsic_asm "GroupMemoryBarrierWithGroupSync";
     case cuda: __intrinsic_asm "__syncthreads()";
-    case metal: __intrinsic_asm "threadgroup_barrier(mem_flags::mem_threadgroup)";
+    case metal: __intrinsic_asm "simdgroup_barrier(mem_flags::none)";
     case spirv:
         spirv_asm
         {
@@ -11655,25 +11676,6 @@ vector<T,N> nextafter(vector<T,N> x, vector<T,N> y)
     }
 }
 
-/// Generate a random number (unsupported).
-/// @param x The seed value.
-/// @remarks This function is not supported in that it always returns 0.
-/// @deprecated
-/// @category math
-[__readNone]
-[deprecated("Always returns 0")]
-float noise(float x)
-{
-    return 0;
-}
-
-[__readNone]
-[deprecated("Always returns 0")]
-__generic<let N : int> float noise(vector<float, N> x)
-{
-    return 0;
-}
-
 /// Indicate that an index may be non-uniform at execution time.
 ///
 /// Shader Model 5.1 and 6.x introduce support for dynamic indexing
@@ -12414,9 +12416,49 @@ __generic<T:__BuiltinArithmeticType, U:__BuiltinArithmeticType>
 __intrinsic_op($(kIROp_IntCast))
 T __int_cast(U val);
 
+__generic<T:__BuiltinArithmeticType, U:__BuiltinArithmeticType>
+__intrinsic_op($(kIROp_FloatCast))
+T __real_cast(U val);
+
+__generic<T:__BuiltinArithmeticType, U:__BuiltinArithmeticType>
+__intrinsic_op($(kIROp_CastIntToFloat))
+T __int_to_float_cast(U val);
+
+__generic<T:__BuiltinArithmeticType, U:__BuiltinArithmeticType>
+__intrinsic_op($(kIROp_CastFloatToInt))
+T __float_to_int_cast(U val);
+
+__generic<T:__BuiltinArithmeticType, U:__BuiltinArithmeticType>
+[__unsafeForceInlineEarly]
+T __arithmetic_cast(U val)
+{
+    if (__isFloat<T>() && __isInt<U>())
+        return __int_to_float_cast<T>(val);
+    else if (__isInt<T>() && __isFloat<U>())
+        return __float_to_int_cast<T>(val);
+    else if (__isFloat<T>() && __isFloat<U>())
+        return __real_cast<T>(val);
+    else if (__isInt<T>() && __isInt<U>())
+        return __int_cast<T>(val);
+    return T(0);
+}
+
 __generic<T:__BuiltinArithmeticType, U:__BuiltinArithmeticType, let N : int>
 __intrinsic_op($(kIROp_IntCast))
 vector<T,N> __int_cast(vector<U,N> val);
+
+__generic<T:__BuiltinArithmeticType, U:__BuiltinArithmeticType, let N : int>
+__intrinsic_op($(kIROp_FloatCast))
+vector<T,N> __real_cast(vector<U,N> val);
+
+__generic<T:__BuiltinArithmeticType, U:__BuiltinArithmeticType, let N : int>
+__intrinsic_op($(kIROp_CastIntToFloat))
+vector<T,N> __int_to_float_cast(vector<U,N> val);
+
+__generic<T:__BuiltinArithmeticType, U:__BuiltinArithmeticType, let N : int>
+__intrinsic_op($(kIROp_CastFloatToInt))
+vector<T,N> __float_to_int_cast(vector<U,N> val);
+
 
 /// Extract sign of value.
 /// @param x The value to extract the sign of.
@@ -14363,7 +14405,7 @@ matrix<T,N,M> WaveMaskPrefixBitXor(WaveMask mask, matrix<T,N,M> expr)
 __generic<T : __BuiltinType>
 __glsl_extension(GL_KHR_shader_subgroup_quad)
 __spirv_version(1.3)
-[require(glsl_hlsl_spirv, subgroup_quad)]
+[require(glsl_hlsl_metal_spirv, subgroup_quad)]
 T QuadReadLaneAt(T sourceValue, uint quadLaneID)
 {
     __target_switch
@@ -14372,6 +14414,9 @@ T QuadReadLaneAt(T sourceValue, uint quadLaneID)
         __intrinsic_asm "QuadReadLaneAt";
     case glsl:
         __intrinsic_asm "subgroupQuadBroadcast";
+    case metal:
+        // TODO: Need to add intrinsics to access Metal and WGSL's broadcast variant where lane is const for all threads.
+        __intrinsic_asm "quad_shuffle($0, ushort($1))";
     case spirv:
         return spirv_asm {
             OpCapability GroupNonUniformQuad;
@@ -14382,7 +14427,7 @@ T QuadReadLaneAt(T sourceValue, uint quadLaneID)
 __generic<T : __BuiltinType, let N : int>
 __glsl_extension(GL_KHR_shader_subgroup_quad)
 __spirv_version(1.3)
-[require(glsl_hlsl_spirv, subgroup_quad)]
+[require(glsl_hlsl_metal_spirv, subgroup_quad)]
 vector<T,N> QuadReadLaneAt(vector<T,N> sourceValue, uint quadLaneID)
 {
     __target_switch
@@ -14391,6 +14436,8 @@ vector<T,N> QuadReadLaneAt(vector<T,N> sourceValue, uint quadLaneID)
         __intrinsic_asm "QuadReadLaneAt";
     case glsl:
         __intrinsic_asm "subgroupQuadBroadcast";
+    case metal:
+        __intrinsic_asm "quad_shuffle($0, ushort($1))";
     case spirv:
         return spirv_asm {
             OpCapability GroupNonUniformQuad;
@@ -14404,42 +14451,44 @@ __generic<T : __BuiltinType, let N : int, let M : int> matrix<T,N,M> QuadReadLan
 __generic<T : __BuiltinType>
 __glsl_extension(GL_KHR_shader_subgroup_quad)
 __spirv_version(1.3)
-[require(glsl_hlsl_spirv, subgroup_quad)]
+__wgsl_extension(subgroups)
+[require(glsl_hlsl_spirv_wgsl, subgroup_quad)]
 T QuadReadAcrossX(T localValue)
 {
     __target_switch
     {
-    case hlsl:
-        __intrinsic_asm "QuadReadAcrossX";
-    case glsl:
-        __intrinsic_asm "subgroupQuadSwapHorizontal($0)";
+    case hlsl: __intrinsic_asm "QuadReadAcrossX";
+    case glsl: __intrinsic_asm "subgroupQuadSwapHorizontal($0)";
     case spirv:
         uint direction = 0u;
-        return spirv_asm {
+        return spirv_asm 
+        {
             OpCapability GroupNonUniformQuad;
             result:$$T = OpGroupNonUniformQuadSwap Subgroup $localValue $direction;
         };
+    case wgsl: __intrinsic_asm "quadSwapX";
     }
 }
 
 __generic<T : __BuiltinType, let N : int>
 __glsl_extension(GL_KHR_shader_subgroup_quad)
 __spirv_version(1.3)
-[require(glsl_hlsl_spirv, subgroup_quad)]
+__wgsl_extension(subgroups)
+[require(glsl_hlsl_spirv_wgsl, subgroup_quad)]
 vector<T,N> QuadReadAcrossX(vector<T,N> localValue)
 {
     __target_switch
     {
-    case hlsl:
-        __intrinsic_asm "QuadReadAcrossX";
-    case glsl:
-        __intrinsic_asm "subgroupQuadSwapHorizontal($0)";
+    case hlsl: __intrinsic_asm "QuadReadAcrossX";
+    case glsl: __intrinsic_asm "subgroupQuadSwapHorizontal($0)";
     case spirv:
         uint direction = 0u;
-        return spirv_asm {
+        return spirv_asm 
+        {
             OpCapability GroupNonUniformQuad;
             result:$$vector<T,N> = OpGroupNonUniformQuadSwap Subgroup $localValue $direction;
         };
+    case wgsl: __intrinsic_asm "quadSwapX";
     }
 }
 __generic<T : __BuiltinType, let N : int, let M : int> matrix<T,N,M> QuadReadAcrossX(matrix<T,N,M> localValue);
@@ -14448,109 +14497,118 @@ __generic<T : __BuiltinType, let N : int, let M : int> matrix<T,N,M> QuadReadAcr
 __generic<T : __BuiltinType>
 __glsl_extension(GL_KHR_shader_subgroup_quad)
 __spirv_version(1.3)
-[require(glsl_hlsl_spirv, subgroup_quad)]
+__wgsl_extension(subgroups)
+[require(glsl_hlsl_spirv_wgsl, subgroup_quad)]
 T QuadReadAcrossY(T localValue)
 {
     __target_switch
     {
-    case hlsl:
-        __intrinsic_asm "QuadReadAcrossY";
-    case glsl:
-        __intrinsic_asm "subgroupQuadSwapVertical($0)";
+    case hlsl: __intrinsic_asm "QuadReadAcrossY";
+    case glsl: __intrinsic_asm "subgroupQuadSwapVertical($0)";
     case spirv:
         uint direction = 1u;
-        return spirv_asm {
+        return spirv_asm 
+        {
             OpCapability GroupNonUniformQuad;
             result:$$T = OpGroupNonUniformQuadSwap Subgroup $localValue $direction;
         };
+    case wgsl: __intrinsic_asm "quadSwapY";
     }
 }
 __generic<T : __BuiltinType, let N : int>
 __glsl_extension(GL_KHR_shader_subgroup_quad)
 __spirv_version(1.3)
-[require(glsl_hlsl_spirv, subgroup_quad)]
+__wgsl_extension(subgroups)
+[require(glsl_hlsl_spirv_wgsl, subgroup_quad)]
 vector<T,N> QuadReadAcrossY(vector<T,N> localValue)
 {
     __target_switch
     {
-    case hlsl:
-        __intrinsic_asm "QuadReadAcrossY";
-    case glsl:
-        __intrinsic_asm "subgroupQuadSwapVertical($0)";
+    case hlsl: __intrinsic_asm "QuadReadAcrossY";
+    case glsl: __intrinsic_asm "subgroupQuadSwapVertical($0)";
     case spirv:
         uint direction = 1u;
-        return spirv_asm {
+        return spirv_asm 
+        {
             OpCapability GroupNonUniformQuad;
             result:$$vector<T,N> = OpGroupNonUniformQuadSwap Subgroup $localValue $direction;
         };
+    case wgsl: __intrinsic_asm "quadSwapY";
     }
 }
-
 __generic<T : __BuiltinType, let N : int, let M : int> matrix<T,N,M> QuadReadAcrossY(matrix<T,N,M> localValue);
 
 /// @category wave
 __generic<T : __BuiltinType>
 __glsl_extension(GL_KHR_shader_subgroup_quad)
 __spirv_version(1.3)
-[require(glsl_hlsl_spirv, subgroup_quad)]
+__wgsl_extension(subgroups)
+[require(glsl_hlsl_spirv_wgsl, subgroup_quad)]
 T QuadReadAcrossDiagonal(T localValue)
 {
     __target_switch
     {
-    case hlsl:
-        __intrinsic_asm "QuadReadAcrossDiagonal";
-    case glsl:
-        __intrinsic_asm "subgroupQuadSwapDiagonal($0)";
+    case hlsl: __intrinsic_asm "QuadReadAcrossDiagonal";
+    case glsl: __intrinsic_asm "subgroupQuadSwapDiagonal($0)";
     case spirv:
         uint direction = 2u;
-        return spirv_asm {
+        return spirv_asm 
+        {
             OpCapability GroupNonUniformQuad;
             result:$$T = OpGroupNonUniformQuadSwap Subgroup $localValue $direction;
         };
+    case wgsl: __intrinsic_asm "quadSwapDiagonal";
     }
 }
 __generic<T : __BuiltinType, let N : int>
 __glsl_extension(GL_KHR_shader_subgroup_quad)
 __spirv_version(1.3)
-[require(glsl_hlsl_spirv, subgroup_quad)]
+__wgsl_extension(subgroups)
+[require(glsl_hlsl_spirv_wgsl, subgroup_quad)]
 vector<T,N> QuadReadAcrossDiagonal(vector<T,N> localValue)
 {
     __target_switch
     {
-    case hlsl:
-        __intrinsic_asm "QuadReadAcrossDiagonal";
-    case glsl:
-        __intrinsic_asm "subgroupQuadSwapDiagonal($0)";
+    case hlsl: __intrinsic_asm "QuadReadAcrossDiagonal";
+    case glsl: __intrinsic_asm "subgroupQuadSwapDiagonal($0)";
     case spirv:
         uint direction = 2u;
-        return spirv_asm {
+        return spirv_asm 
+        {
             OpCapability GroupNonUniformQuad;
             result:$$vector<T,N> = OpGroupNonUniformQuadSwap Subgroup $localValue $direction;
         };
+    case wgsl: __intrinsic_asm "quadSwapDiagonal";
     }
 }
 __generic<T : __BuiltinType, let N : int, let M : int> matrix<T,N,M> QuadReadAcrossDiagonal(matrix<T,N,M> localValue);
 
 // WaveActiveBitAnd, WaveActiveBitOr, WaveActiveBitXor
 ${{{{
-struct WaveActiveBitOpEntry { const char* hlslName; const char* glslName; const char* spirvName; };
-const WaveActiveBitOpEntry kWaveActiveBitOpEntries[] = {{"BitAnd", "And", "BitwiseAnd"}, {"BitOr", "Or", "BitwiseOr"}, {"BitXor", "Xor", "BitwiseXor"}};
+struct WaveActiveBitOpEntry { const char* hlslName; const char* glslName; const char* spirvName; const char* metalName; };
+const WaveActiveBitOpEntry kWaveActiveBitOpEntries[] = {{"BitAnd", "And", "BitwiseAnd", "and"}, {"BitOr", "Or", "BitwiseOr", "or"}, {"BitXor", "Xor", "BitwiseXor", "xor"}};
 for (auto opName : kWaveActiveBitOpEntries) {
 }}}}
 /// @category wave Wave and quad functions
 __generic<T : __BuiltinIntegerType>
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 T WaveActive$(opName.hlslName)(T expr)
 {
     __target_switch
     {
-    case glsl: __intrinsic_asm "subgroup$(opName.glslName)($0)";
-    case hlsl: __intrinsic_asm "WaveActive$(opName.hlslName)";
+    case glsl:
+    case wgsl:
+        __intrinsic_asm "subgroup$(opName.glslName)";
+    case hlsl:
+        __intrinsic_asm "WaveActive$(opName.hlslName)";
+    case metal:
+        __intrinsic_asm "simd_$(opName.metalName)";
     case spirv:
         return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniform$(opName.spirvName) $$T result Subgroup Reduce $expr};
-    default:
+    case cuda:
         return WaveMask$(opName.hlslName)(WaveGetActiveMask(), expr);
     }
 }
@@ -14558,36 +14616,42 @@ T WaveActive$(opName.hlslName)(T expr)
 __generic<T : __BuiltinIntegerType, let N : int>
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 vector<T, N> WaveActive$(opName.hlslName)(vector<T, N> expr)
 {
     __target_switch
     {
-    case glsl: __intrinsic_asm "subgroup$(opName.glslName)($0)";
-    case hlsl: __intrinsic_asm "WaveActive$(opName.hlslName)";
+    case glsl:
+    case wgsl:
+        __intrinsic_asm "subgroup$(opName.glslName)";
+    case hlsl:
+        __intrinsic_asm "WaveActive$(opName.hlslName)";
+    case metal:
+        __intrinsic_asm "simd_$(opName.metalName)";
     case spirv:
         return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniform$(opName.spirvName) $$vector<T, N> result Subgroup Reduce $expr};
-    default:
+    case cuda:
         return WaveMask$(opName.hlslName)(WaveGetActiveMask(), expr);
     }
 }
 
 __generic<T : __BuiltinIntegerType, let N : int, let M : int>
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 matrix<T, N, M> WaveActive$(opName.hlslName)(matrix<T, N, M> expr)
 {
     __target_switch
     {
-    case hlsl: __intrinsic_asm "WaveActive$(opName.hlslName)";
-    case glsl:
-    case spirv:
+    case cuda:
+        return WaveMask$(opName.hlslName)(WaveGetActiveMask(), expr);
+    case hlsl:
+        __intrinsic_asm "WaveActive$(opName.hlslName)";
+    default:
         matrix<T,N,M> result;
         [ForceUnroll]
         for (int i = 0; i < N; ++i)
             result[i] = WaveActive$(opName.hlslName)(expr[i]);
         return result;
-    default:
-        return WaveMask$(opName.hlslName)(WaveGetActiveMask(), expr);
     }
 }
 ${{{{
@@ -14596,70 +14660,83 @@ ${{{{
 
 // WaveActiveMin/Max
 ${{{{
-const char* kWaveActiveMinMaxNames[] = {"Min", "Max"};
-for (const char* opName : kWaveActiveMinMaxNames) {
+struct WaveActiveMinMaxEntry { const char* name; const char* metalName; };
+const WaveActiveMinMaxEntry kWaveActiveMinMaxNames[] = {{"Min", "min"}, {"Max", "max"}};
+for (const auto opName : kWaveActiveMinMaxNames) {
 }}}}
 /// @category wave
 __generic<T : __BuiltinArithmeticType>
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
-T WaveActive$(opName)(T expr)
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
+T WaveActive$(opName.name)(T expr)
 {
     __target_switch
     {
-    case glsl: __intrinsic_asm "subgroup$(opName)($0)";
-    case hlsl: __intrinsic_asm "WaveActive$(opName)";
+    case glsl:
+    case wgsl:
+        __intrinsic_asm "subgroup$(opName.name)";
+    case hlsl:
+        __intrinsic_asm "WaveActive$(opName.name)";
+    case metal:
+        __intrinsic_asm "simd_$(opName.metalName)";
     case spirv:
         if (__isFloat<T>())
-            return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniformF$(opName) $$T result Subgroup Reduce $expr};
+            return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniformF$(opName.name) $$T result Subgroup Reduce $expr};
         else if (__isUnsignedInt<T>())
-            return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniformU$(opName) $$T result Subgroup Reduce $expr};
+            return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniformU$(opName.name) $$T result Subgroup Reduce $expr};
         else
-            return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniformS$(opName) $$T result Subgroup Reduce $expr};
-    default:
-        return WaveMask$(opName)(WaveGetActiveMask(), expr);
+            return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniformS$(opName.name) $$T result Subgroup Reduce $expr};
+    case cuda:
+        return WaveMask$(opName.name)(WaveGetActiveMask(), expr);
     }
 }
 
 __generic<T : __BuiltinArithmeticType, let N : int>
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
-vector<T, N> WaveActive$(opName)(vector<T, N> expr)
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
+vector<T, N> WaveActive$(opName.name)(vector<T, N> expr)
 {
     __target_switch
     {
-    case glsl: __intrinsic_asm "subgroup$(opName)($0)";
-    case hlsl: __intrinsic_asm "WaveActive$(opName)";
+    case glsl:
+    case wgsl:
+        __intrinsic_asm "subgroup$(opName.name)";
+    case hlsl:
+        __intrinsic_asm "WaveActive$(opName.name)";
+    case metal:
+        __intrinsic_asm "simd_$(opName.metalName)";
     case spirv:
         if (__isFloat<T>())
-            return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniformF$(opName) $$vector<T, N> result Subgroup Reduce $expr};
+            return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniformF$(opName.name) $$vector<T, N> result Subgroup Reduce $expr};
         else if (__isUnsignedInt<T>())
-            return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniformU$(opName) $$vector<T, N> result Subgroup Reduce $expr};
+            return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniformU$(opName.name) $$vector<T, N> result Subgroup Reduce $expr};
         else
-            return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniformS$(opName) $$vector<T, N> result Subgroup Reduce $expr};
-    default:
-        return WaveMask$(opName)(WaveGetActiveMask(), expr);
+            return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniformS$(opName.name) $$vector<T, N> result Subgroup Reduce $expr};
+    case cuda:
+        return WaveMask$(opName.name)(WaveGetActiveMask(), expr);
     }
 }
 
 __generic<T : __BuiltinArithmeticType, let N : int, let M : int>
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
-matrix<T, N, M> WaveActive$(opName)(matrix<T, N, M> expr)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
+matrix<T, N, M> WaveActive$(opName.name)(matrix<T, N, M> expr)
 {
     __target_switch
     {
-    case hlsl: __intrinsic_asm "WaveActive$(opName)";
-    case glsl:
-    case spirv:
+    case cuda:
+        return WaveMask$(opName.name)(WaveGetActiveMask(), expr);
+    case hlsl:
+        __intrinsic_asm "WaveActive$(opName.name)";
+    default:
         matrix<T, N, M> result;
         [ForceUnroll]
         for (int i = 0; i < N; ++i)
-            result[i] = WaveActive$(opName)(expr[i]);
+            result[i] = WaveActive$(opName.name)(expr[i]);
         return result;
-    default:
-        return WaveMask$(opName)(WaveGetActiveMask(), expr);
     }
 }
 
@@ -14669,15 +14746,16 @@ ${{{{
 
 // WaveActiveProduct/Sum
 ${{{{
-struct WaveActiveProductSumEntry { const char* hlslName; const char* glslName; };
-const WaveActiveProductSumEntry kWaveActivProductSumNames[] = {{"Product", "Mul"}, {"Sum", "Add"}};
+struct WaveActiveProductSumEntry { const char* hlslName; const char* glslName; const char* metalName; };
+const WaveActiveProductSumEntry kWaveActivProductSumNames[] = {{"Product", "Mul", "product"}, {"Sum", "Add", "sum"}};
 for (auto opName : kWaveActivProductSumNames) {
 }}}}
 /// @category wave
 __generic<T : __BuiltinArithmeticType>
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 T WaveActive$(opName.hlslName)(T expr)
 {
     __target_switch
@@ -14686,6 +14764,7 @@ T WaveActive$(opName.hlslName)(T expr)
         if (__isHalf<T>()) __requireGLSLExtension("GL_EXT_shader_subgroup_extended_types_float16");
         __intrinsic_asm "subgroup$(opName.glslName)($0)";
     case hlsl: __intrinsic_asm "WaveActive$(opName.hlslName)";
+    case metal: __intrinsic_asm "simd_$(opName.metalName)";
     case spirv:
         if (__isFloat<T>())
             return spirv_asm {
@@ -14701,7 +14780,8 @@ T WaveActive$(opName.hlslName)(T expr)
             };
         }
         else return expr;
-    default:
+    case wgsl: __intrinsic_asm "subgroup$(opName.glslName)";
+    case cuda:
         return WaveMask$(opName.hlslName)(WaveGetActiveMask(), expr);
     }
 }
@@ -14709,7 +14789,8 @@ T WaveActive$(opName.hlslName)(T expr)
 __generic<T : __BuiltinArithmeticType, let N : int>
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 vector<T,N> WaveActive$(opName.hlslName)(vector<T,N> expr)
 {
     __target_switch
@@ -14718,6 +14799,7 @@ vector<T,N> WaveActive$(opName.hlslName)(vector<T,N> expr)
         if (__isHalf<T>()) __requireGLSLExtension("GL_EXT_shader_subgroup_extended_types_float16");
         __intrinsic_asm "subgroup$(opName.glslName)($0)";
     case hlsl: __intrinsic_asm "WaveActive$(opName.hlslName)";
+    case metal: __intrinsic_asm "simd_$(opName.metalName)";
     case spirv:
         if (__isFloat<T>())
             return spirv_asm {
@@ -14733,32 +14815,34 @@ vector<T,N> WaveActive$(opName.hlslName)(vector<T,N> expr)
             };
         }
         else return expr;
-    default:
+    case wgsl: __intrinsic_asm "subgroup$(opName.glslName)";
+    case cuda:
         return WaveMask$(opName.hlslName)(WaveGetActiveMask(), expr);
     }
 }
 
 __generic<T : __BuiltinArithmeticType, let N : int, let M : int>
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 matrix<T, N, M> WaveActive$(opName.hlslName)(matrix<T, N, M> expr)
 {
     __target_switch
     {
-    case hlsl: __intrinsic_asm "WaveActive$(opName.hlslName)";
-    case glsl:
-    case spirv:
+    case cuda:
+        return WaveMask$(opName.hlslName)(WaveGetActiveMask(), expr);
+    case hlsl:
+        __intrinsic_asm "WaveActive$(opName.hlslName)";
+    default:
         matrix<T, N, M> result;
         [ForceUnroll]
         for (int i = 0; i < N; ++i)
             result[i] = WaveActive$(opName.hlslName)(expr[i]);
         return result;
-    default:
-        return WaveMask$(opName.hlslName)(WaveGetActiveMask(), expr);
     }
 }
 ${{{{
 } // WaveActiveProduct/WaveActiveProductSum.
 }}}}
+
 /// @category wave
 __generic<T : __BuiltinType>
 __glsl_extension(GL_KHR_shader_subgroup_vote)
@@ -14821,22 +14905,26 @@ bool WaveActiveAllEqual(matrix<T, N, M> value)
 /// @category wave
 __glsl_extension(GL_KHR_shader_subgroup_vote)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl_spirv, subgroup_vote)]
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_vote)]
 bool WaveActiveAllTrue(bool condition)
 {
     __target_switch
     {
     case glsl:
-        __intrinsic_asm "subgroupAll($0)";
+    case wgsl:
+        __intrinsic_asm "subgroupAll";
     case hlsl:
         __intrinsic_asm "WaveActiveAllTrue($0)";
+    case metal:
+        __intrinsic_asm "simd_all";
     case spirv:
         return spirv_asm
         {
             OpCapability GroupNonUniformVote;
             OpGroupNonUniformAll $$bool result Subgroup $condition
         };
-    default:
+    case cuda:
         return WaveMaskAllTrue(WaveGetActiveMask(), condition);
     }
 }
@@ -14844,15 +14932,19 @@ bool WaveActiveAllTrue(bool condition)
 /// @category wave
 __glsl_extension(GL_KHR_shader_subgroup_vote)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl_spirv, subgroup_vote)]
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_vote)]
 bool WaveActiveAnyTrue(bool condition)
 {
     __target_switch
     {
     case glsl:
-        __intrinsic_asm "subgroupAny($0)";
+    case wgsl:
+        __intrinsic_asm "subgroupAny";
     case hlsl:
         __intrinsic_asm "WaveActiveAnyTrue($0)";
+    case metal:
+        __intrinsic_asm "simd_any";
     case spirv:
         return spirv_asm
         {
@@ -14864,19 +14956,38 @@ bool WaveActiveAnyTrue(bool condition)
     }
 }
 
+
+//@hidden:
+[ForceInline]
+uint64_t __metal_simd_ballot(bool expr)
+{
+    __intrinsic_asm "uint64_t(simd_ballot($0))";
+}
+
+[ForceInline]
+uint4 __metal_simd_vote_mask_to_uint4(uint64_t mask)
+{
+    return uint4(uint(mask & 0xFFFFFFFF), uint(mask >> 32), 0, 0);
+}
+
+//@public:
+
 /// @category wave
 __glsl_extension(GL_KHR_shader_subgroup_ballot)
 __spirv_version(1.3)
+__wgsl_extension(subgroups)
 [NonUniformReturn]
-[require(cuda_glsl_hlsl_spirv, subgroup_ballot)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_ballot)]
 uint4 WaveActiveBallot(bool condition)
 {
     __target_switch
     {
     case glsl:
-        __intrinsic_asm "subgroupBallot($0)";
+    case wgsl:
+        __intrinsic_asm "subgroupBallot";
     case hlsl:
         __intrinsic_asm "WaveActiveBallot";
+    case metal: return __metal_simd_vote_mask_to_uint4(__metal_simd_ballot(condition));
     case spirv:
         return spirv_asm
         {
@@ -14948,23 +15059,24 @@ uint WaveGetLaneIndex()
 /// @category wave
 __glsl_extension(GL_KHR_shader_subgroup_basic)
 __spirv_version(1.3)
+__wgsl_extension(subgroups)
 [NonUniformReturn]
-[require(cuda_glsl_hlsl_spirv, subgroup_basic)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_basic)]
 bool WaveIsFirstLane()
 {
     __target_switch
     {
-    case glsl:
-        __intrinsic_asm "subgroupElect()";
-    case hlsl:
-        __intrinsic_asm "WaveIsFirstLane()";
+    case glsl: __intrinsic_asm "subgroupElect()";
+    case hlsl: __intrinsic_asm "WaveIsFirstLane()";
+    case metal: __intrinsic_asm "simd_is_first";
     case spirv:
         return spirv_asm
         {
             OpCapability GroupNonUniformBallot;
             OpGroupNonUniformElect $$bool result Subgroup
         };
-    default:
+    case wgsl: __intrinsic_asm "subgroupElect";
+    case cuda:
         return WaveMaskIsFirstLane(WaveGetActiveMask());
     }
 }
@@ -15003,7 +15115,8 @@ uint _WaveCountBits(uint4 value)
 __generic<T : __BuiltinArithmeticType>
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 T WavePrefixProduct(T expr)
 {
     __target_switch
@@ -15012,6 +15125,7 @@ T WavePrefixProduct(T expr)
         if (__isHalf<T>()) __requireGLSLExtension("GL_EXT_shader_subgroup_extended_types_float16");
         __intrinsic_asm "subgroupExclusiveMul($0)";
     case hlsl: __intrinsic_asm "WavePrefixProduct";
+    case metal: __intrinsic_asm "simd_prefix_exclusive_product";
     case spirv:
         if (__isFloat<T>())
             return spirv_asm {
@@ -15027,7 +15141,8 @@ T WavePrefixProduct(T expr)
             };
         }
         else return expr;
-    default:
+    case wgsl: __intrinsic_asm "subgroupExclusiveMul";
+    case cuda:
         return WaveMaskPrefixProduct(WaveGetActiveMask(), expr);
     }
 }
@@ -15036,7 +15151,8 @@ T WavePrefixProduct(T expr)
 __generic<T : __BuiltinArithmeticType, let N : int>
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 vector<T,N> WavePrefixProduct(vector<T,N> expr)
 {
     __target_switch
@@ -15045,6 +15161,7 @@ vector<T,N> WavePrefixProduct(vector<T,N> expr)
         if (__isHalf<T>()) __requireGLSLExtension("GL_EXT_shader_subgroup_extended_types_float16");
         __intrinsic_asm "subgroupExclusiveMul($0)";
     case hlsl: __intrinsic_asm "WavePrefixProduct";
+    case metal: __intrinsic_asm "simd_prefix_exclusive_product";
     case spirv:
         if (__isFloat<T>())
             return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniformFMul $$vector<T,N> result Subgroup ExclusiveScan $expr};
@@ -15057,26 +15174,27 @@ vector<T,N> WavePrefixProduct(vector<T,N> expr)
             };
         }
         else return expr;
-    default:
+    case wgsl: __intrinsic_asm "subgroupExclusiveMul";
+    case cuda:
         return WaveMaskPrefixProduct(WaveGetActiveMask(), expr);
     }
 }
 /// @category wave
 __generic<T : __BuiltinArithmeticType, let N : int, let M : int>
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+[require(cuda_glsl_hlsl_spirv_wgsl, subgroup_arithmetic)]
 matrix<T, N, M> WavePrefixProduct(matrix<T, N, M> expr)
 {
     __target_switch
     {
-    case hlsl: __intrinsic_asm "WavePrefixProduct";
-    case glsl:
-    case spirv:
+    case cuda:
+        return WaveMaskPrefixProduct(WaveGetActiveMask(), expr);
+    case hlsl:
+        __intrinsic_asm "WavePrefixProduct";
+    default:
         matrix<T, N, M> result;
         for (int i = 0; i < N; ++i)
             result[i] = WavePrefixProduct(expr[i]);
         return result;
-    default:
-        return WaveMaskPrefixProduct(WaveGetActiveMask(), expr);
     }
 }
 
@@ -15084,7 +15202,8 @@ matrix<T, N, M> WavePrefixProduct(matrix<T, N, M> expr)
 __generic<T : __BuiltinArithmeticType>
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 T WavePrefixSum(T expr)
 {
     __target_switch
@@ -15093,6 +15212,7 @@ T WavePrefixSum(T expr)
         if (__isHalf<T>()) __requireGLSLExtension("GL_EXT_shader_subgroup_extended_types_float16");
         __intrinsic_asm "subgroupExclusiveAdd($0)";
     case hlsl: __intrinsic_asm "WavePrefixSum";
+    case metal: __intrinsic_asm "simd_prefix_exclusive_sum";
     case spirv:
         if (__isFloat<T>())
             return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniformFAdd $$T result Subgroup ExclusiveScan $expr};
@@ -15105,7 +15225,8 @@ T WavePrefixSum(T expr)
             };
         }
         else return expr;
-    default:
+    case wgsl: __intrinsic_asm "subgroupExclusiveAdd";
+    case cuda:
         return WaveMaskPrefixSum(WaveGetActiveMask(), expr);
     }
 }
@@ -15113,7 +15234,8 @@ T WavePrefixSum(T expr)
 __generic<T : __BuiltinArithmeticType, let N : int>
 __glsl_extension(GL_KHR_shader_subgroup_arithmetic)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 vector<T,N> WavePrefixSum(vector<T,N> expr)
 {
     __target_switch
@@ -15122,6 +15244,7 @@ vector<T,N> WavePrefixSum(vector<T,N> expr)
         if (__isHalf<T>()) __requireGLSLExtension("GL_EXT_shader_subgroup_extended_types_float16");
         __intrinsic_asm "subgroupExclusiveAdd($0)";
     case hlsl: __intrinsic_asm "WavePrefixSum";
+    case metal: __intrinsic_asm "simd_prefix_exclusive_sum";
     case spirv:
         if (__isFloat<T>())
             return spirv_asm {OpCapability GroupNonUniformArithmetic; OpGroupNonUniformFAdd $$vector<T,N> result Subgroup ExclusiveScan $expr};
@@ -15134,26 +15257,27 @@ vector<T,N> WavePrefixSum(vector<T,N> expr)
             };
         }
         else return expr;
-    default:
+    case wgsl: __intrinsic_asm "subgroupExclusiveAdd";
+    case cuda:
         return WaveMaskPrefixSum(WaveGetActiveMask(), expr);
     }
 }
 
 __generic<T : __BuiltinArithmeticType, let N : int, let M : int>
-[require(cuda_glsl_hlsl_spirv, subgroup_arithmetic)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_arithmetic)]
 matrix<T,N,M> WavePrefixSum(matrix<T,N,M> expr)
 {
     __target_switch
     {
-    case hlsl: __intrinsic_asm "WavePrefixSum";
-    case glsl:
-    case spirv:
+    case cuda:
+        return WaveMaskPrefixSum(WaveGetActiveMask(), expr);
+    case hlsl:
+        __intrinsic_asm "WavePrefixSum";
+    default:
         matrix<T, N, M> result;
         for (int i = 0; i < N; ++i)
             result[i] = WavePrefixSum(expr[i]);
         return result;
-    default:
-        return WaveMaskPrefixSum(WaveGetActiveMask(), expr);
     }
 }
 
@@ -15161,7 +15285,8 @@ matrix<T,N,M> WavePrefixSum(matrix<T,N,M> expr)
 __generic<T : __BuiltinType>
 __glsl_extension(GL_KHR_shader_subgroup_ballot)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl_spirv, subgroup_ballot)]
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_ballot)]
 T WaveReadLaneFirst(T expr)
 {
     __target_switch
@@ -15170,9 +15295,11 @@ T WaveReadLaneFirst(T expr)
         if (__isHalf<T>()) __requireGLSLExtension("GL_EXT_shader_subgroup_extended_types_float16");
         __intrinsic_asm "subgroupBroadcastFirst($0)";
     case hlsl: __intrinsic_asm "WaveReadLaneFirst";
+    case metal: __intrinsic_asm "simd_broadcast_first";
     case spirv:
         return spirv_asm {OpCapability GroupNonUniformBallot; OpGroupNonUniformBroadcastFirst $$T result Subgroup $expr};
-    default:
+    case wgsl: __intrinsic_asm "subgroupBroadcastFirst";
+    case cuda:
         return WaveMaskReadLaneFirst(WaveGetActiveMask(), expr);
     }
 }
@@ -15180,7 +15307,8 @@ T WaveReadLaneFirst(T expr)
 __generic<T : __BuiltinType, let N : int>
 __glsl_extension(GL_KHR_shader_subgroup_ballot)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl_spirv, subgroup_ballot)]
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_ballot)]
 vector<T,N> WaveReadLaneFirst(vector<T,N> expr)
 {
     __target_switch
@@ -15189,28 +15317,29 @@ vector<T,N> WaveReadLaneFirst(vector<T,N> expr)
         if (__isHalf<T>()) __requireGLSLExtension("GL_EXT_shader_subgroup_extended_types_float16");
         __intrinsic_asm "subgroupBroadcastFirst($0)";
     case hlsl: __intrinsic_asm "WaveReadLaneFirst";
+    case metal: __intrinsic_asm "simd_broadcast_first";
     case spirv:
         return spirv_asm {OpCapability GroupNonUniformBallot; OpGroupNonUniformBroadcastFirst $$vector<T,N> result Subgroup $expr};
-    default:
+    case wgsl: __intrinsic_asm "subgroupBroadcastFirst";
+    case cuda:
         return WaveMaskReadLaneFirst(WaveGetActiveMask(), expr);
     }
 }
 
 __generic<T : __BuiltinType, let N : int, let M : int>
-[require(cuda_glsl_hlsl_spirv, subgroup_ballot)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_ballot)]
 matrix<T,N,M> WaveReadLaneFirst(matrix<T,N,M> expr)
 {
     __target_switch
     {
+    case cuda:
+        return WaveMaskReadLaneFirst(WaveGetActiveMask(), expr);
     case hlsl: __intrinsic_asm "WaveReadLaneFirst";
-    case glsl:
-    case spirv:
+    default:
         matrix<T, N, M> result;
         for (int i = 0; i < N; ++i)
             result[i] = WaveReadLaneFirst(expr[i]);
         return result;
-    default:
-        return WaveMaskReadLaneFirst(WaveGetActiveMask(), expr);
     }
 }
 
@@ -15224,7 +15353,8 @@ matrix<T,N,M> WaveReadLaneFirst(matrix<T,N,M> expr)
 __generic<T : __BuiltinType>
 __glsl_extension(GL_KHR_shader_subgroup_ballot)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl_spirv, subgroup_ballot)]
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_ballot)]
 T WaveBroadcastLaneAt(T value, constexpr int lane)
 {
     __target_switch
@@ -15233,10 +15363,12 @@ T WaveBroadcastLaneAt(T value, constexpr int lane)
         if (__isHalf<T>()) __requireGLSLExtension("GL_EXT_shader_subgroup_extended_types_float16");
         __intrinsic_asm "subgroupBroadcast($0, $1)";
     case hlsl: __intrinsic_asm "WaveReadLaneAt";
+    case metal: __intrinsic_asm "simd_broadcast($0, ushort($1))";
     case spirv:
         let ulane = uint(lane);
         return spirv_asm {OpCapability GroupNonUniformBallot; OpGroupNonUniformBroadcast $$T result Subgroup $value $ulane};
-    default:
+    case wgsl: __intrinsic_asm "subgroupBroadcast";
+    case cuda:
         return WaveMaskBroadcastLaneAt(WaveGetActiveMask(), value, lane);
     }
 }
@@ -15245,7 +15377,8 @@ T WaveBroadcastLaneAt(T value, constexpr int lane)
 __generic<T : __BuiltinType, let N : int>
 __glsl_extension(GL_KHR_shader_subgroup_ballot)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl_spirv, subgroup_ballot)]
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_ballot)]
 vector<T,N> WaveBroadcastLaneAt(vector<T,N> value, constexpr int lane)
 {
     __target_switch
@@ -15254,30 +15387,29 @@ vector<T,N> WaveBroadcastLaneAt(vector<T,N> value, constexpr int lane)
         if (__isHalf<T>()) __requireGLSLExtension("GL_EXT_shader_subgroup_extended_types_float16");
         __intrinsic_asm "subgroupBroadcast($0, $1)";
     case hlsl: __intrinsic_asm "WaveReadLaneAt";
+    case metal: __intrinsic_asm "simd_broadcast($0, ushort($1))";
     case spirv:
         let ulane = uint(lane);
         return spirv_asm {OpCapability GroupNonUniformBallot; OpGroupNonUniformBroadcast $$vector<T,N> result Subgroup $value $ulane};
-    default:
+    case wgsl: __intrinsic_asm "subgroupBroadcast";
+    case cuda:
         return WaveMaskBroadcastLaneAt(WaveGetActiveMask(), value, lane);
     }
 }
 
 __generic<T : __BuiltinType, let N : int, let M : int>
-[require(cuda_glsl_hlsl_spirv, subgroup_ballot)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_ballot)]
 matrix<T, N, M> WaveBroadcastLaneAt(matrix<T, N, M> value, constexpr int lane)
 {
     __target_switch
     {
     case cuda: __intrinsic_asm "_waveShuffleMultiple(_getActiveMask(), $0, $1)";
     case hlsl: __intrinsic_asm "WaveReadLaneAt";
-    case glsl:
-    case spirv:
+    default:
         matrix<T, N, M> result;
         for (int i = 0; i < N; ++i)
             result[i] = WaveBroadcastLaneAt(value[i], lane);
         return result;
-    default:
-        return WaveMaskBroadcastLaneAt(WaveGetActiveMask(), value, lane);
     }
 }
 
@@ -15287,7 +15419,8 @@ matrix<T, N, M> WaveBroadcastLaneAt(matrix<T, N, M> value, constexpr int lane)
 __generic<T : __BuiltinType>
 __glsl_extension(GL_KHR_shader_subgroup_shuffle)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl_spirv, subgroup_shuffle)]
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_shuffle)]
 T WaveReadLaneAt(T value, int lane)
 {
     __target_switch
@@ -15296,18 +15429,21 @@ T WaveReadLaneAt(T value, int lane)
         if (__isHalf<T>()) __requireGLSLExtension("GL_EXT_shader_subgroup_extended_types_float16");
         __intrinsic_asm "subgroupShuffle($0, $1)";
     case hlsl: __intrinsic_asm "WaveReadLaneAt";
+    case metal: __intrinsic_asm "simd_shuffle($0, ushort($1))";
     case spirv:
         let ulane = uint(lane);
         return spirv_asm {OpCapability GroupNonUniformShuffle; OpGroupNonUniformShuffle $$T result Subgroup $value $ulane};
-    default:
+    case wgsl: __intrinsic_asm "subgroupShuffle";
+    case cuda:
         return WaveMaskReadLaneAt(WaveGetActiveMask(), value, lane);
     }
 }
 
 __generic<T : __BuiltinType, let N : int>
-__spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_shuffle)
-[require(cuda_glsl_hlsl_spirv, subgroup_shuffle)]
+__spirv_version(1.3)
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_shuffle)]
 vector<T,N> WaveReadLaneAt(vector<T,N> value, int lane)
 {
     __target_switch
@@ -15316,30 +15452,29 @@ vector<T,N> WaveReadLaneAt(vector<T,N> value, int lane)
         if (__isHalf<T>()) __requireGLSLExtension("GL_EXT_shader_subgroup_extended_types_float16");
         __intrinsic_asm "subgroupShuffle($0, $1)";
     case hlsl: __intrinsic_asm "WaveReadLaneAt";
+    case metal: __intrinsic_asm "simd_shuffle($0, ushort($1))";
     case spirv:
         let ulane = uint(lane);
         return spirv_asm {OpCapability GroupNonUniformShuffle; OpGroupNonUniformShuffle $$vector<T,N> result Subgroup $value $ulane};
-    default:
+    case wgsl: __intrinsic_asm "subgroupShuffle";
+    case cuda:
         return WaveMaskReadLaneAt(WaveGetActiveMask(), value, lane);
     }
 }
 
 __generic<T : __BuiltinType, let N : int, let M : int>
-[require(cuda_glsl_hlsl_spirv, subgroup_shuffle)]
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_shuffle)]
 matrix<T, N, M> WaveReadLaneAt(matrix<T, N, M> value, int lane)
 {
     __target_switch
     {
     case cuda: __intrinsic_asm "_waveShuffleMultiple(_getActiveMask(), $0, $1)";
     case hlsl: __intrinsic_asm "WaveReadLaneAt";
-    case glsl:
-    case spirv:
+    default:
         matrix<T,N,M> result;
         for (int i = 0; i < N; ++i)
             result[i] = WaveReadLaneAt(value[i], lane);
         return result;
-    default:
-        return WaveMaskReadLaneAt(WaveGetActiveMask(), value, lane);
     }
 }
 
@@ -15350,7 +15485,8 @@ matrix<T, N, M> WaveReadLaneAt(matrix<T, N, M> value, int lane)
 __generic<T : __BuiltinType>
 __glsl_extension(GL_KHR_shader_subgroup_shuffle)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl_spirv, subgroup_shuffle)]
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_shuffle)]
 T WaveShuffle(T value, int lane)
 {
     __target_switch
@@ -15359,10 +15495,12 @@ T WaveShuffle(T value, int lane)
         if (__isHalf<T>()) __requireGLSLExtension("GL_EXT_shader_subgroup_extended_types_float16");
         __intrinsic_asm "subgroupShuffle($0, $1)";
     case hlsl: __intrinsic_asm "WaveReadLaneAt";
+    case metal: __intrinsic_asm "simd_shuffle($0, ushort($1))";
     case spirv:
         let ulane = uint(lane);
         return spirv_asm {OpCapability GroupNonUniformShuffle; OpGroupNonUniformShuffle $$T result Subgroup $value $ulane};
-    default:
+    case wgsl: __intrinsic_asm "subgroupShuffle";
+    case cuda:
         return WaveMaskShuffle(WaveGetActiveMask(), value, lane);
     }
 }
@@ -15371,7 +15509,8 @@ T WaveShuffle(T value, int lane)
 __generic<T : __BuiltinType, let N : int>
 __glsl_extension(GL_KHR_shader_subgroup_shuffle)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl_spirv, subgroup_shuffle)]
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_shuffle)]
 vector<T,N> WaveShuffle(vector<T,N> value, int lane)
 {
     __target_switch
@@ -15380,10 +15519,12 @@ vector<T,N> WaveShuffle(vector<T,N> value, int lane)
         if (__isHalf<T>()) __requireGLSLExtension("GL_EXT_shader_subgroup_extended_types_float16");
         __intrinsic_asm "subgroupShuffle($0, $1)";
     case hlsl: __intrinsic_asm "WaveReadLaneAt";
+    case metal: __intrinsic_asm "simd_shuffle($0, ushort($1))";
     case spirv:
         let ulane = uint(lane);
         return spirv_asm {OpCapability GroupNonUniformShuffle; OpGroupNonUniformShuffle $$vector<T,N> result Subgroup $value $ulane};
-    default:
+    case wgsl: __intrinsic_asm "subgroupShuffle";
+    case cuda:
         return WaveMaskShuffle(WaveGetActiveMask(), value, lane);
     }
 }
@@ -15426,12 +15567,14 @@ uint WavePrefixCountBits(bool value)
 /// @category wave
 __glsl_extension(GL_KHR_shader_subgroup_ballot)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl_spirv, subgroup_ballot)]
+__wgsl_extension(subgroups)
+[require(cuda_glsl_hlsl_spirv_wgsl, subgroup_ballot)]
 uint4 WaveGetConvergedMulti()
 {
     __target_switch
     {
     case glsl:
+    case wgsl:
         __intrinsic_asm "subgroupBallot(true)";
     case hlsl: __intrinsic_asm "WaveActiveBallot(true)";
     case cuda: __intrinsic_asm "make_uint4(__activemask(), 0, 0, 0)";
@@ -15517,7 +15660,7 @@ uint4 WaveMatch(matrix<T,N,M> value)
 }
 
 /// @category wave
-[require(cuda_hlsl, waveprefix)]
+[require(cuda_hlsl, wave_multi_prefix)]
 uint WaveMultiPrefixCountBits(bool value, uint4 mask)
 {
     __target_switch
@@ -15528,190 +15671,366 @@ uint WaveMultiPrefixCountBits(bool value, uint4 mask)
 }
 
 /// @category wave
-__generic<T : __BuiltinArithmeticType>
-__glsl_extension(GL_KHR_shader_subgroup_arithmetic)
+__generic<T : __BuiltinIntegerType>
+__glsl_extension(GL_NV_shader_subgroup_partitioned)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl, waveprefix)]
+[require(cuda_glsl_hlsl_spirv, wave_multi_prefix)]
 T WaveMultiPrefixBitAnd(T expr, uint4 mask)
 {
     __target_switch
     {
     case cuda: __intrinsic_asm "_wavePrefixAnd(_getMultiPrefixMask(($1).x), $0)";
-    case glsl: __intrinsic_asm "subgroupExclusiveAnd($0)";
     case hlsl: __intrinsic_asm "WaveMultiPrefixBitAnd";
+    case glsl: __intrinsic_asm "subgroupPartitionedExclusiveAndNV";
+    case spirv:
+        return spirv_asm
+        {
+            OpExtension "SPV_NV_shader_subgroup_partitioned";
+            OpCapability GroupNonUniformPartitionedNV;
+            result:$$T = OpGroupNonUniformBitwiseAnd Subgroup PartitionedExclusiveScanNV $expr $mask
+        };
     }
 }
 
-__glsl_extension(GL_KHR_shader_subgroup_arithmetic)
+__generic<T : __BuiltinIntegerType, let N : int>
+__glsl_extension(GL_NV_shader_subgroup_partitioned)
 __spirv_version(1.3)
-__generic<T : __BuiltinArithmeticType, let N : int>
-[require(cuda_glsl_hlsl, waveprefix)]
+[require(cuda_glsl_hlsl_spirv, wave_multi_prefix)]
 vector<T,N> WaveMultiPrefixBitAnd(vector<T,N> expr, uint4 mask)
 {
     __target_switch
     {
     case cuda: __intrinsic_asm "_wavePrefixAndMultiple(_getMultiPrefixMask(($1).x), $0)";
-    case glsl: __intrinsic_asm "subgroupExclusiveAnd($0)";
     case hlsl: __intrinsic_asm "WaveMultiPrefixBitAnd";
+    case glsl: __intrinsic_asm "subgroupPartitionedExclusiveAndNV";
+    case spirv:
+        return spirv_asm
+        {
+            OpExtension "SPV_NV_shader_subgroup_partitioned";
+            OpCapability GroupNonUniformPartitionedNV;
+            result:$$vector<T,N> = OpGroupNonUniformBitwiseAnd Subgroup PartitionedExclusiveScanNV $expr $mask
+        };
     }
 }
 
-__generic<T : __BuiltinArithmeticType, let N : int, let M : int>
-[require(cuda_hlsl, waveprefix)]
+__generic<T : __BuiltinIntegerType, let N : int, let M : int>
+[require(cuda_glsl_hlsl_spirv, wave_multi_prefix)]
 matrix<T,N,M> WaveMultiPrefixBitAnd(matrix<T,N,M> expr, uint4 mask)
 {
     __target_switch
     {
     case cuda: __intrinsic_asm "_wavePrefixAndMultiple(_getMultiPrefixMask(($1).x), $0)";
     case hlsl: __intrinsic_asm "WaveMultiPrefixBitAnd";
+    case glsl:
+    case spirv:
+        matrix<T, N, M> result;
+        for (int i = 0; i < N; ++i)
+            result[i] = WaveMultiPrefixBitAnd(expr[i], mask);
+        return result;
     }
 }
 
 /// @category wave
-__generic<T : __BuiltinArithmeticType>
-__glsl_extension(GL_KHR_shader_subgroup_arithmetic)
+__generic<T : __BuiltinIntegerType>
+__glsl_extension(GL_NV_shader_subgroup_partitioned)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl, waveprefix)]
+[require(cuda_glsl_hlsl_spirv, wave_multi_prefix)]
 T WaveMultiPrefixBitOr(T expr, uint4 mask)
 {
     __target_switch
     {
     case cuda: __intrinsic_asm "_wavePrefixOr(, _getMultiPrefixMask(($1).x), $0)";
-    case glsl: __intrinsic_asm "subgroupExclusiveOr($0)";
     case hlsl: __intrinsic_asm "WaveMultiPrefixBitOr";
+    case glsl: __intrinsic_asm "subgroupPartitionedExclusiveOrNV";
+    case spirv:
+        return spirv_asm
+        {
+            OpExtension "SPV_NV_shader_subgroup_partitioned";
+            OpCapability GroupNonUniformPartitionedNV;
+            result:$$T = OpGroupNonUniformBitwiseOr Subgroup PartitionedExclusiveScanNV $expr $mask
+        };
     }
 }
 
-__generic<T : __BuiltinArithmeticType, let N : int>
-__glsl_extension(GL_KHR_shader_subgroup_arithmetic)
+__generic<T : __BuiltinIntegerType, let N : int>
+__glsl_extension(GL_NV_shader_subgroup_partitioned)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl, waveprefix)]
+[require(cuda_glsl_hlsl_spirv, wave_multi_prefix)]
 vector<T,N> WaveMultiPrefixBitOr(vector<T,N> expr, uint4 mask)
 {
     __target_switch
     {
     case cuda: __intrinsic_asm "_wavePrefixOrMultiple(_getMultiPrefixMask(($1).x), $0)";
-    case glsl: __intrinsic_asm "subgroupExclusiveOr($0)";
     case hlsl: __intrinsic_asm "WaveMultiPrefixBitOr";
+    case glsl: __intrinsic_asm "subgroupPartitionedExclusiveOrNV";
+    case spirv:
+        return spirv_asm
+        {
+            OpExtension "SPV_NV_shader_subgroup_partitioned";
+            OpCapability GroupNonUniformPartitionedNV;
+            result:$$vector<T,N> = OpGroupNonUniformBitwiseOr Subgroup PartitionedExclusiveScanNV $expr $mask
+        };
     }
 }
 
-__generic<T : __BuiltinArithmeticType, let N : int, let M : int>
-[require(cuda_hlsl, waveprefix)]
+__generic<T : __BuiltinIntegerType, let N : int, let M : int>
+[require(cuda_glsl_hlsl_spirv, wave_multi_prefix)]
 matrix<T,N,M> WaveMultiPrefixBitOr(matrix<T,N,M> expr, uint4 mask)
 {
     __target_switch
     {
     case cuda: __intrinsic_asm "_wavePrefixOrMultiple(_getMultiPrefixMask(($1).x), $0)";
     case hlsl: __intrinsic_asm "WaveMultiPrefixBitOr";
+    case glsl:
+    case spirv:
+        matrix<T, N, M> result;
+        for (int i = 0; i < N; ++i)
+            result[i] = WaveMultiPrefixBitOr(expr[i], mask);
+        return result;
     }
 }
 
 /// @category wave
-__generic<T : __BuiltinArithmeticType>
-__glsl_extension(GL_KHR_shader_subgroup_arithmetic)
+__generic<T : __BuiltinIntegerType>
+__glsl_extension(GL_NV_shader_subgroup_partitioned)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl, waveprefix)]
+[require(cuda_glsl_hlsl_spirv, wave_multi_prefix)]
 T WaveMultiPrefixBitXor(T expr, uint4 mask)
 {
     __target_switch
     {
     case cuda: __intrinsic_asm "_wavePrefixXor(_getMultiPrefixMask(($1).x), $0)";
-    case glsl: __intrinsic_asm "subgroupExclusiveXor($0)";
     case hlsl: __intrinsic_asm "WaveMultiPrefixBitXor";
+    case glsl: __intrinsic_asm "subgroupPartitionedExclusiveXorNV";
+    case spirv:
+        return spirv_asm
+        {
+            OpExtension "SPV_NV_shader_subgroup_partitioned";
+            OpCapability GroupNonUniformPartitionedNV;
+            result:$$T = OpGroupNonUniformBitwiseXor Subgroup PartitionedExclusiveScanNV $expr $mask
+        };
     }
 }
 
-__generic<T : __BuiltinArithmeticType, let N : int>
-__glsl_extension(GL_KHR_shader_subgroup_arithmetic)
+__generic<T : __BuiltinIntegerType, let N : int>
+__glsl_extension(GL_NV_shader_subgroup_partitioned)
 __spirv_version(1.3)
-[require(cuda_glsl_hlsl, waveprefix)]
+[require(cuda_glsl_hlsl_spirv, wave_multi_prefix)]
 vector<T,N> WaveMultiPrefixBitXor(vector<T,N> expr, uint4 mask)
 {
     __target_switch
     {
     case cuda: __intrinsic_asm "_wavePrefixXorMultiple(_getMultiPrefixMask(($1).x), $0)";
-    case glsl: __intrinsic_asm "subgroupExclusiveXor($0)";
     case hlsl: __intrinsic_asm "WaveMultiPrefixBitXor";
+    case glsl: __intrinsic_asm "subgroupPartitionedExclusiveXorNV";
+    case spirv:
+        return spirv_asm
+        {
+            OpExtension "SPV_NV_shader_subgroup_partitioned";
+            OpCapability GroupNonUniformPartitionedNV;
+            result:$$vector<T,N> = OpGroupNonUniformBitwiseXor Subgroup PartitionedExclusiveScanNV $expr $mask
+        };
     }
 }
 
-__generic<T : __BuiltinArithmeticType, let N : int, let M : int>
-[require(cuda_hlsl, waveprefix)]
+__generic<T : __BuiltinIntegerType, let N : int, let M : int>
+[require(cuda_glsl_hlsl_spirv, wave_multi_prefix)]
 matrix<T,N,M> WaveMultiPrefixBitXor(matrix<T,N,M> expr, uint4 mask)
 {
     __target_switch
     {
     case cuda: __intrinsic_asm "_wavePrefixXorMultiple(_getMultiPrefixMask(($1).x), $0)";
     case hlsl: __intrinsic_asm "WaveMultiPrefixBitXor";
+    case glsl:
+    case spirv:
+        matrix<T, N, M> result;
+        for (int i = 0; i < N; ++i)
+            result[i] = WaveMultiPrefixBitXor(expr[i], mask);
+        return result;
     }
 }
 
 /// @category wave
 __generic<T : __BuiltinArithmeticType>
-[require(cuda_hlsl, waveprefix)]
+__glsl_extension(GL_NV_shader_subgroup_partitioned)
+__spirv_version(1.3)
+[require(cuda_glsl_hlsl_spirv, wave_multi_prefix)]
 T WaveMultiPrefixProduct(T value, uint4 mask)
 {
     __target_switch
     {
     case cuda: __intrinsic_asm "_wavePrefixProduct(_getMultiPrefixMask(($1).x), $0)";
     case hlsl: __intrinsic_asm "WaveMultiPrefixProduct";
+    case glsl: __intrinsic_asm "subgroupPartitionedExclusiveMulNV";
+    case spirv:
+        {
+            spirv_asm
+            {
+                OpExtension "SPV_NV_shader_subgroup_partitioned";
+                OpCapability GroupNonUniformPartitionedNV;
+            };
+
+            if (__isFloat<T>())
+            {
+                return spirv_asm
+                {
+                    result:$$T = OpGroupNonUniformFMul Subgroup PartitionedExclusiveScanNV $value $mask
+                };
+            }
+            else
+            {
+                return spirv_asm
+                {
+                    result:$$T = OpGroupNonUniformIMul Subgroup PartitionedExclusiveScanNV $value $mask
+                };
+            }
+        }
     }
 }
 
 __generic<T : __BuiltinArithmeticType, let N : int>
-[require(cuda_hlsl, waveprefix)]
+__glsl_extension(GL_NV_shader_subgroup_partitioned)
+__spirv_version(1.3)
+[require(cuda_glsl_hlsl_spirv, wave_multi_prefix)]
 vector<T,N> WaveMultiPrefixProduct(vector<T,N> value, uint4 mask)
 {
     __target_switch
     {
     case cuda: __intrinsic_asm "_wavePrefixProductMultiple(_getMultiPrefixMask(($1).x), $0)";
     case hlsl: __intrinsic_asm "WaveMultiPrefixProduct";
+    case glsl: __intrinsic_asm "subgroupPartitionedExclusiveMulNV";
+    case spirv:
+        {
+            spirv_asm
+            {
+                OpExtension "SPV_NV_shader_subgroup_partitioned";
+                OpCapability GroupNonUniformPartitionedNV;
+            };
+
+            if (__isFloat<T>())
+            {
+                return spirv_asm
+                {
+                    result:$$vector<T,N> = OpGroupNonUniformFMul Subgroup PartitionedExclusiveScanNV $value $mask
+                };
+            }
+            else
+            {
+                return spirv_asm
+                {
+                    result:$$vector<T,N> = OpGroupNonUniformIMul Subgroup PartitionedExclusiveScanNV $value $mask
+                };
+            }
+        }
     }
 }
 
 __generic<T : __BuiltinArithmeticType, let N : int, let M : int>
-[require(cuda_hlsl, waveprefix)]
+[require(cuda_glsl_hlsl_spirv, wave_multi_prefix)]
 matrix<T,N,M> WaveMultiPrefixProduct(matrix<T,N,M> value, uint4 mask)
 {
     __target_switch
     {
     case cuda: __intrinsic_asm "_wavePrefixProductMultiple(_getMultiPrefixMask(($1).x), $0)";
     case hlsl: __intrinsic_asm "WaveMultiPrefixProduct";
+    case glsl:
+    case spirv:
+        matrix<T, N, M> result;
+        for (int i = 0; i < N; ++i)
+            result[i] = WaveMultiPrefixProduct(value[i], mask);
+        return result;
     }
 }
 
 /// @category wave
 __generic<T : __BuiltinArithmeticType>
-[require(cuda_hlsl, waveprefix)]
+__glsl_extension(GL_NV_shader_subgroup_partitioned)
+__spirv_version(1.3)
+[require(cuda_glsl_hlsl_spirv, wave_multi_prefix)]
 T WaveMultiPrefixSum(T value, uint4 mask)
 {
     __target_switch
     {
     case cuda: __intrinsic_asm "_wavePrefixSum(_getMultiPrefixMask(($1).x), $0)";
     case hlsl: __intrinsic_asm "WaveMultiPrefixSum";
+    case glsl: __intrinsic_asm "subgroupPartitionedExclusiveAddNV";
+    case spirv:
+        {
+            spirv_asm
+            {
+                OpExtension "SPV_NV_shader_subgroup_partitioned";
+                OpCapability GroupNonUniformPartitionedNV;
+            };
+
+            if (__isFloat<T>())
+            {
+                return spirv_asm
+                {
+                    result:$$T = OpGroupNonUniformFAdd Subgroup PartitionedExclusiveScanNV $value $mask
+                };
+            }
+            else
+            {
+                return spirv_asm
+                {
+                    result:$$T = OpGroupNonUniformIAdd Subgroup PartitionedExclusiveScanNV $value $mask
+                };
+            }
+        }
     }
 }
 
 __generic<T : __BuiltinArithmeticType, let N : int>
-[require(cuda_hlsl, waveprefix)]
+__glsl_extension(GL_NV_shader_subgroup_partitioned)
+[require(cuda_glsl_hlsl_spirv, wave_multi_prefix)]
+__spirv_version(1.3)
 vector<T,N> WaveMultiPrefixSum(vector<T,N> value, uint4 mask)
 {
     __target_switch
     {
     case cuda: __intrinsic_asm "_wavePrefixSumMultiple(_getMultiPrefixMask(($1).x), $0 )";
     case hlsl: __intrinsic_asm "WaveMultiPrefixSum";
+    case glsl: __intrinsic_asm "subgroupPartitionedExclusiveAddNV";
+    case spirv:
+        {
+            spirv_asm
+            {
+                OpExtension "SPV_NV_shader_subgroup_partitioned";
+                OpCapability GroupNonUniformPartitionedNV;
+            };
+
+            if (__isFloat<T>())
+            {
+                return spirv_asm
+                {
+                    result:$$vector<T,N> = OpGroupNonUniformFAdd Subgroup PartitionedExclusiveScanNV $value $mask
+                };
+            }
+            else
+            {
+                return spirv_asm
+                {
+                    result:$$vector<T,N> = OpGroupNonUniformIAdd Subgroup PartitionedExclusiveScanNV $value $mask
+                };
+            }
+        }
     }
 }
 
 __generic<T : __BuiltinArithmeticType, let N : int, let M : int>
-[require(cuda_hlsl, waveprefix)]
+[require(cuda_glsl_hlsl_spirv, wave_multi_prefix)]
 matrix<T,N,M> WaveMultiPrefixSum(matrix<T,N,M> value, uint4 mask)
 {
     __target_switch
     {
     case cuda: __intrinsic_asm "_wavePrefixSumMultiple(_getMultiPrefixMask(($1).x), $0)";
     case hlsl: __intrinsic_asm "WaveMultiPrefixSum";
+    case glsl:
+    case spirv:
+        matrix<T, N, M> result;
+        for (int i = 0; i < N; ++i)
+            result[i] = WaveMultiPrefixSum(value[i], mask);
+        return result;
     }
 }
 
@@ -16127,6 +16446,13 @@ __generic<T>
 __intrinsic_op($(kIROp_ForceVarIntoStructTemporarily))
 Ref<T> __forceVarIntoStructTemporarily(inout T maybeStruct);
 
+// Some functions require a struct type which is decorated with a [raypayload]
+// attribute. This will do the same as __forceVarIntoStructTemporarily and also
+// ensure that the struct type in question is decorated appropriately.
+__generic<T>
+__intrinsic_op($(kIROp_ForceVarIntoRayPayloadStructTemporarily))
+Ref<T> __forceVarIntoRayPayloadStructTemporarily(inout T maybeStruct);
+
 __generic<payload_t>
 [require(hlsl, raytracing)]
 void __traceRayHLSL(
@@ -16211,7 +16537,7 @@ void TraceRay(
             MultiplierForGeometryContributionToHitGroupIndex,
             MissShaderIndex,
             Ray,
-            __forceVarIntoStructTemporarily(Payload));
+            __forceVarIntoRayPayloadStructTemporarily(Payload));
         return;
     case cuda: __intrinsic_asm "traceOptiXRay";
     case glsl:
@@ -16349,7 +16675,7 @@ void TraceMotionRay(
             MissShaderIndex,
             Ray,
             CurrentTime,
-            __forceVarIntoStructTemporarily(Payload));
+            __forceVarIntoRayPayloadStructTemporarily(Payload));
         return;
     case glsl:
     {
@@ -18493,7 +18819,7 @@ struct HitObject
                     MultiplierForGeometryContributionToHitGroupIndex, 
                     MissShaderIndex, 
                     Ray, 
-                    __forceVarIntoStructTemporarily(Payload),
+                    __forceVarIntoRayPayloadStructTemporarily(Payload),
                     hitObj);
                 return hitObj;
             }
@@ -18586,7 +18912,7 @@ struct HitObject
                 MissShaderIndex,
                 Ray,
                 CurrentTime,
-                __forceVarIntoStructTemporarily(Payload));
+                __forceVarIntoRayPayloadStructTemporarily(Payload));
         case glsl:
             {
                 [__vulkanRayPayload]
@@ -19104,7 +19430,7 @@ struct HitObject
             __InvokeHLSL(
                 AccelerationStructure,
                 HitOrMiss,
-                __forceVarIntoStructTemporarily(Payload));
+                __forceVarIntoRayPayloadStructTemporarily(Payload));
         case glsl:
             {
                 [__vulkanRayPayload]
@@ -19964,7 +20290,7 @@ void ReorderThread( HitObject HitOrMiss )
 ///
 /// There doesn't appear to be an equivalent for debugBreak for HLSL
 
-
+[require(glsl)]
 __specialized_for_target(glsl)
 [[vk::spirv_instruction(1, "NonSemantic.DebugBreak")]]
 void __glslDebugBreak();
@@ -20815,11 +21141,12 @@ ${
 
         case hlsl:
             uint isSingleLod = 0;
-            Footprint footprint =  {__queryFootprint$(CoarseOrFine)NVAPI(
+            __queryFootprint$(CoarseOrFine)NVAPI(
                 Shape.dimensions,
                 __getRegisterSpace(this), __getRegisterIndex(this),
                 __getRegisterSpace(sampler), __getRegisterIndex(sampler),
-                __vectorReshape<3>(coords), granularity, /* out */isSingleLod), false};
+                __vectorReshape<3>(coords), granularity, /* out */isSingleLod);
+            Footprint footprint = {false};
             footprint._isSingleLevel = (isSingleLod != 0);
             return footprint;
         }
@@ -20848,12 +21175,12 @@ ${
             return footprint;
         case hlsl:
             uint isSingleLod = 0;
-            Footprint footprint = {__queryFootprint$(CoarseOrFine)BiasNVAPI(
+            __queryFootprint$(CoarseOrFine)BiasNVAPI(
                 Shape.dimensions,
                 __getRegisterSpace(this), __getRegisterIndex(this),
                 __getRegisterSpace(sampler), __getRegisterIndex(sampler),
-                __vectorReshape<3>(coords), granularity, lodBias, /* out */isSingleLod), false}; 
-            
+                __vectorReshape<3>(coords), granularity, lodBias, /* out */isSingleLod);
+            Footprint footprint = {false};
             footprint._isSingleLevel = (isSingleLod != 0);
             return footprint;
         }
@@ -20931,12 +21258,12 @@ ${
             return footprint;
         case hlsl:
             uint isSingleLod = 0;
-            Footprint footprint = {__queryFootprint$(CoarseOrFine)LevelNVAPI(
+            __queryFootprint$(CoarseOrFine)LevelNVAPI(
                 Shape.dimensions,
                 __getRegisterSpace(this), __getRegisterIndex(this),
                 __getRegisterSpace(sampler), __getRegisterIndex(sampler),
-                __vectorReshape<3>(coords), granularity, lod, /* out */isSingleLod), false};
-            
+                __vectorReshape<3>(coords), granularity, lod, /* out */isSingleLod);
+            Footprint footprint = {false};
             footprint._isSingleLevel = (isSingleLod != 0);
             return footprint;
         }
@@ -20970,12 +21297,12 @@ ${{{
             return footprint;
         case hlsl:
             uint isSingleLod = 0;
-            Footprint footprint = {__queryFootprint$(CoarseOrFine)GradNVAPI(
+            __queryFootprint$(CoarseOrFine)GradNVAPI(
                 Shape.dimensions,
                 __getRegisterSpace(this), __getRegisterIndex(this),
                 __getRegisterSpace(sampler), __getRegisterIndex(sampler),
-                __vectorReshape<3>(coords), granularity, __vectorReshape<3>(dx), __vectorReshape<3>(dy), /* out */isSingleLod), false};
-
+                __vectorReshape<3>(coords), granularity, __vectorReshape<3>(dx), __vectorReshape<3>(dy), /* out */isSingleLod);
+            Footprint footprint = {false};
             footprint._isSingleLevel = (isSingleLod != 0);
             return footprint;
         }
@@ -21301,6 +21628,7 @@ ${{{{
 }
 }}}}
 
+
 /// Represents a bindless handle to a descriptor. A descriptor handle is always an ordinary data type and can be
 /// declared in any memory location.
 /// @remarks Opaque descriptor types such as textures(`Texture2D` etc.), `SamplerState` and buffers (e.g. `StructuredBuffer`)
@@ -21403,8 +21731,6 @@ extern T getDescriptorFromHandle<T:IOpaqueDescriptor>(DescriptorHandle<T> handle
 __intrinsic_op($(kIROp_NonUniformResourceIndex))
 DescriptorHandle<T> nonuniform<T:IOpaqueDescriptor>(DescriptorHandle<T> ptr);
 
-//@hidden:
-
 __glsl_version(450)
 __glsl_extension(GL_ARB_shader_clock)
 [require(glsl_spirv, GL_ARB_shader_clock)]
@@ -21455,6 +21781,2220 @@ extension<T, L : IBufferDataLayout> RWStructuredBuffer<T, L> : IRWArray<T>
 extension<T, L : IBufferDataLayout> RasterizerOrderedStructuredBuffer<T, L> : IRWArray<T>
 {
     int getCount() { uint count; uint stride; this.GetDimensions(count, stride); return count; }
+}
+
+//
+// Cooperative Vector
+//
+
+__intrinsic_type($(kIROp_CoopVectorType))
+[require(cooperative_vector)]
+struct CoopVec<T : __BuiltinArithmeticType, let N : int> : IArray<T>, IArithmetic
+{
+    //
+    // Initialization 
+    //
+
+    [ForceInline]
+    [require(cooperative_vector)]
+    __init()
+    {
+        this = CoopVec<T, N>(T(0));
+    }
+    [ForceInline]
+    [require(cooperative_vector)]
+    __init(T t)
+    {
+        this.fill(t);
+    }
+    [ForceInline]
+    [require(cooperative_vector)]
+    __init<U : __BuiltinArithmeticType>(CoopVec<U, N> other)
+    {
+        this.copyFrom(other);
+    }
+
+    [ForceInline]
+    [require(cooperative_vector)]
+    __init<each U : __BuiltinArithmeticType>(expand each U args)
+    {
+        static_assert(countof(U) == N, "number of arguments to CoopVec constructor must match number of elements");
+        this = __makeCoopVec<T, N>(expand (__arithmetic_cast<T>(each args)));
+    }
+    [OverloadRank(-10)]
+    [ForceInline]
+    __init(int i)
+    {
+        this = CoopVec<T, N>(T(i));
+    }
+    [ForceInline]
+    __init(This x)
+    {
+        this = x;
+    }
+
+    //
+    // Simple setters
+    //
+
+    [require(hlsl)] 
+    [mutating] 
+    [ForceInline]
+    void copyFrom<U : __BuiltinArithmeticType>(CoopVec<U,N> other)
+    { 
+        __target_switch 
+        { 
+        case hlsl: __intrinsic_asm ".CopyFrom";
+        default:
+            if (__isFloat<T>() && __isInt<U>())
+                this = __int_to_float_cast<T>(other);
+            else if (__isInt<T>() && __isFloat<U>())
+                this = __float_to_int_cast<T>(other);
+            else if (__isFloat<T>() && __isFloat<U>())
+                this = __real_cast<T>(other);
+            else if (__isInt<T>() && __isInt<U>())
+                this = __int_cast<T>(other);
+        } 
+    }
+
+    [require(cooperative_vector)] 
+    [mutating] 
+    [ForceInline]
+    void fill(T t)
+    { 
+        __target_switch
+        {
+        case spirv:
+            this = spirv_asm {
+                OpExtension "SPV_EXT_replicated_composites";
+                OpCapability ReplicatedCompositesEXT;
+                result:$$CoopVec<T, N> = OpCompositeConstructReplicateEXT $t;
+            };
+        case hlsl:
+            case hlsl: __intrinsic_asm ".Fill"; 
+        default:
+            for(int i = 0; i < N; ++i)
+                this[i] = t;
+        }
+    }
+
+    //
+    // Loading and storing
+    //
+
+    [ForceInline]
+    [require(cooperative_vector)]
+    void store(RWByteAddressBuffer buffer, int32_t byteOffset16ByteAligned = 0)
+    {
+        __target_switch
+        {
+        case spirv:
+            let ptr = buffer.GetBufferPointer();
+            spirv_asm
+            {
+                // TODO: Should this be a byte offset
+                OpCooperativeVectorStoreNV $ptr $byteOffset16ByteAligned $this None;
+            };
+        // Not supported
+        // case hlsl:
+        //    this.__Store(buffer, byteOffset16ByteAligned);
+        default:
+            for(int i = 0; i < N; ++i)
+                buffer.StoreByteOffset(byteOffset16ByteAligned + __elemToByteOffset<T>(i), this[i]);
+        }
+    }
+
+    [ForceInline]
+    [require(cooperative_vector)]
+    void store(RWStructuredBuffer<T> buffer, int32_t byteOffset16ByteAligned = 0)
+    {
+        __target_switch
+        {
+        case spirv:
+            let ptr = __getStructuredBufferPtr(buffer);
+            spirv_asm
+            {
+                // TODO: Should this be a byte offset
+                OpCooperativeVectorStoreNV $ptr $byteOffset16ByteAligned $this None;
+            };
+        // Not supported
+        // case hlsl:
+        //    this.__Store(buffer, byteOffset16ByteAligned);
+        default:
+            for(int i = 0; i < N; ++i)
+                buffer[i + __byteToElemOffset<T>(byteOffset16ByteAligned)] = this[i];
+        }
+    }
+
+    [ForceInline]
+    [require(cooperative_vector)]
+    void store<let M : int>(__ref groupshared T[M] data, int32_t byteOffset16ByteAligned = 0)
+    {
+        __target_switch
+        {
+        case spirv:
+            spirv_asm{
+                OpCooperativeVectorStoreNV &data $byteOffset16ByteAligned $this None;
+            };
+        case hlsl:
+            this.__Store(data, __byteToElemOffset<T>(byteOffset16ByteAligned));
+        default:
+            for(int i = 0; i < N; ++i)
+                data[i + __byteToElemOffset<T>(byteOffset16ByteAligned)] = this[i];
+        }
+    }
+
+    /// spirv only storing to a groupshared array of any type
+    [ForceInline]
+    [require(spirv, cooperative_vector)]
+    void storeAny<U, let M : int>(__ref groupshared U[M] data, int32_t byteOffset16ByteAligned = 0)
+    {
+        __target_switch
+        {
+        case spirv:
+            spirv_asm{
+                OpCooperativeVectorStoreNV &data $byteOffset16ByteAligned $this None;
+            };
+        }
+    }
+    [ForceInline]
+    [require(spirv, cooperative_vector)]
+    void storeAny<U, let M : int, let L : int>(__ref groupshared vector<U, L>[M] data, int32_t byteOffset16ByteAligned = 0)
+    {
+        __target_switch
+        {
+        case spirv:
+            spirv_asm{
+                OpCooperativeVectorStoreNV &data $byteOffset16ByteAligned $this None;
+            };
+        }
+    }
+
+    [ForceInline]
+    [__NoSideEffect]
+    [require(cooperative_vector)]
+    static CoopVec<T, N> load(ByteAddressBuffer buffer, int32_t byteOffset16ByteAligned = 0)
+    {
+        __target_switch
+        {
+        case spirv:
+            let ptr = buffer.GetBufferPointer();
+            return spirv_asm
+            {
+                result:$$CoopVec<T, N> = OpCooperativeVectorLoadNV $ptr $byteOffset16ByteAligned None;
+            };
+        case hlsl:
+            CoopVec<T, N> ret;
+            ret.__Load(buffer, byteOffset16ByteAligned);
+            return ret;
+        default:
+            var vec = CoopVec<T, N>();
+            for(int i = 0; i < N; ++i)
+                vec[i] = buffer.LoadByteOffset<T>(byteOffset16ByteAligned + __elemToByteOffset<T>(i));
+            return vec;
+        }
+        return CoopVec<T, N>();
+    }
+
+    [ForceInline]
+    [__NoSideEffect]
+    [require(cooperative_vector)]
+    static CoopVec<T, N> load(RWByteAddressBuffer buffer, int32_t byteOffset16ByteAligned = 0)
+    {
+        __target_switch
+        {
+        case spirv:
+            let ptr = buffer.GetBufferPointer();
+            return spirv_asm
+            {
+                result:$$CoopVec<T, N> = OpCooperativeVectorLoadNV $ptr $byteOffset16ByteAligned None;
+            };
+        case hlsl:
+            CoopVec<T, N> ret;
+            ret.__Load(buffer, byteOffset16ByteAligned);
+            return ret;
+        default:
+            var vec = CoopVec<T, N>();
+            for(int i = 0; i < N; ++i)
+                vec[i] = buffer.LoadByteOffset<T>(byteOffset16ByteAligned + __elemToByteOffset<T>(i));
+            return vec;
+        }
+        return CoopVec<T, N>();
+    }
+
+    [ForceInline]
+    [__NoSideEffect]
+    [require(cooperative_vector)]
+    static CoopVec<T, N> load(StructuredBuffer<T> buffer, int32_t byteOffset16ByteAligned = 0)
+    {
+        __target_switch
+        {
+        case spirv:
+            let ptr = __getStructuredBufferPtr(buffer);
+            return spirv_asm
+            {
+                result:$$CoopVec<T, N> = OpCooperativeVectorLoadNV $ptr $byteOffset16ByteAligned None;
+            };
+        // Not supported
+        // case hlsl:
+        //     CoopVec<T, N> ret;
+        //     ret.__Load(buffer, byteOffset16ByteAligned);
+        //     return ret;
+        default:
+            var vec = CoopVec<T, N>();
+            for(int i = 0; i < N; ++i)
+                vec[i] = buffer[__byteToElemOffset<T>(byteOffset16ByteAligned) + i];
+            return vec;
+        }
+        return CoopVec<T, N>();
+    }
+
+    [ForceInline]
+    [__NoSideEffect]
+    [require(spirv, cooperative_vector)]
+    static CoopVec<T, N> load(RWStructuredBuffer<T> buffer, int32_t byteOffset16ByteAligned = 0)
+    {
+        __target_switch
+        {
+        case spirv:
+            let ptr = __getStructuredBufferPtr(buffer);
+            return spirv_asm
+            {
+                result:$$CoopVec<T, N> = OpCooperativeVectorLoadNV $ptr $byteOffset16ByteAligned None;
+            };
+        // Not supported
+        // case hlsl:
+        //     CoopVec<T, N> ret;
+        //     ret.__Load(buffer, byteOffset16ByteAligned);
+        //     return ret;
+        default:
+            var vec = CoopVec<T, N>();
+            for(int i = 0; i < N; ++i)
+                vec[i] = buffer[__byteToElemOffset<T>(byteOffset16ByteAligned) + i];
+            return vec;
+        }
+    }
+
+    // Groupshared
+    [ForceInline]
+    [__NoSideEffect]
+    [require(cooperative_vector)]
+    static CoopVec<T, N> load<let M : int>(__constref groupshared const T[M] data, int32_t byteOffset16ByteAligned = 0)
+    {
+        __target_switch
+        {
+        case spirv:
+            return spirv_asm{
+                result:$$CoopVec<T, N> = OpCooperativeVectorLoadNV &data $byteOffset16ByteAligned None
+            };
+        case hlsl:
+            CoopVec<T, N> ret;
+            ret.__Load(data, __byteToElemOffset<T>(byteOffset16ByteAligned));
+            return ret;
+        default:
+            CoopVec<T,N> result;
+            for(int i = 0; i < N; ++i)
+                result[i] = data[i + __byteToElemOffset<T>(byteOffset16ByteAligned)];
+            return result;
+        }
+    }
+
+    /// spirv only loading from a groupshared array of any type
+    [ForceInline]
+    [__NoSideEffect]
+    [require(spirv, cooperative_vector)]
+    static CoopVec<T, N> loadAny<U : __BuiltinArithmeticType, let M : int>(__constref groupshared const U[M] data, int32_t byteOffset16ByteAligned = 0)
+    {
+        __target_switch
+        {
+        case spirv:
+            return spirv_asm{
+                result:$$CoopVec<T, N> = OpCooperativeVectorLoadNV &data $byteOffset16ByteAligned None
+            };
+        }
+    }
+    [ForceInline]
+    [__NoSideEffect]
+    [require(spirv, cooperative_vector)]
+    static CoopVec<T, N> loadAny<U : __BuiltinArithmeticType, let M : int, let L : int>(__constref groupshared const vector<U, L>[M] data, int32_t byteOffset16ByteAligned = 0)
+    {
+        __target_switch
+        {
+        case spirv:
+            return spirv_asm{
+                result:$$CoopVec<T, N> = OpCooperativeVectorLoadNV &data $byteOffset16ByteAligned None
+            };
+        }
+    }
+
+    //
+    // Subscript
+    //
+
+    __intrinsic_op($(kIROp_GetElement))
+    [__NoSideEffect]
+    T __indexRead(int index);
+
+    __intrinsic_op($(kIROp_GetElementPtr))
+    [__ref]
+    [__NoSideEffect]
+    Ref<T> __indexRef(int index);
+
+    [ForceInline]
+    [__NoSideEffect]
+    int getCount()
+    {
+        return N;
+    }
+
+    __subscript(int index) -> T
+    {
+        [__NoSideEffect]
+        [nonmutating]
+        get
+        {
+            __target_switch
+            {
+            case hlsl: __intrinsic_asm ".ReadFromIndex";
+            default: return __indexRead(index);
+            }
+        }
+
+        [mutating]
+        set
+        {
+            __target_switch
+            {
+            case hlsl: __intrinsic_asm ".WriteToIndex";
+            default: __indexRef(index) = newValue;
+            }
+        }
+
+        // Unavailable on HLSL
+        // The CoopVector HLSL spec says that indexing with a subscript
+        // operation can work, but dxc currently crashes with this
+        // __intrinsic_op($(kIROp_GetElementPtr))
+        // [__ref]
+        // ref;
+    }
+
+    static CoopVec<T, N> replicate(T t)
+    {
+        CoopVec<T, N> ret;
+        ret.fill(t);
+        return ret;
+    }
+
+    //
+    // Equality and ordering
+    //
+
+    bool equals(This other)
+    {
+        for (int i = 0; i < N; i++)
+        {
+            if (this[i] != other[i])
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+    bool lessThan(This other)
+    {
+        for (int i = 0; i < N; i++)
+        {
+            if (this[i] < other[i])
+            {
+                return true;
+            }
+            else if (this[i] > other[i])
+            {
+                return false;
+            }
+        }
+        return false;
+    }
+    bool lessThanOrEquals(This other)
+    {
+        for (int i = 0; i < N; i++)
+        {
+            if (this[i] < other[i])
+            {
+                return true;
+            }
+            else if (this[i] > other[i])
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    //
+    // Arithmetic
+    //
+
+    __intrinsic_op($(kIROp_Add))
+    This __pureAdd(This other);
+
+    [mutating]
+    [require(hlsl)]
+    void __mutAdd(This other)
+    {
+        __target_switch 
+        { 
+        case hlsl: __intrinsic_asm ".Add"; 
+        } 
+    }
+
+    // TODO: Why is this ForceInline necessary for hlsl, dxc bug?
+    [ForceInline]
+    This add(This other)
+    {
+        __target_switch
+        {
+        case hlsl:
+            This ret = this;
+            ret.__mutAdd(other);
+            return ret;
+        default: return __pureAdd(other);
+        }
+    }
+
+    __intrinsic_op($(kIROp_Sub))
+    This __pureSub(This other);
+    [mutating]
+    [require(hlsl)]
+    void __mutSub(This other)
+    { __target_switch { case hlsl: __intrinsic_asm ".Subtract"; } }
+
+    [ForceInline]
+    This sub(This other)
+    {
+        __target_switch
+        {
+        case hlsl:
+            This ret = this;
+            ret.__mutSub(other);
+            return ret;
+        default: return __pureSub(other);
+        }
+    }
+
+    __intrinsic_op($(kIROp_Mul))
+    This __pureMul(This other);
+
+    [mutating]
+    [require(hlsl)]
+    void __mutMul(This other)
+    { __target_switch { case hlsl: __intrinsic_asm ".Multiply"; } }
+
+    [ForceInline]
+    This mul(This other)
+    {
+        __target_switch
+        {
+        case hlsl:
+            This ret = this;
+            ret.__mutMul(other);
+            return ret;
+        default: return __pureMul(other);
+        }
+    }
+
+    __intrinsic_op($(kIROp_Div))
+    This __pureDiv(This other);
+
+    [mutating]
+    [require(hlsl)]
+    void __mutDiv(This other)
+    { __target_switch { case hlsl: __intrinsic_asm ".Divide"; } }
+
+    [ForceInline]
+    This div(This other)
+    {
+        __target_switch
+        {
+        case hlsl:
+            This ret = this;
+            ret.__mutDiv(other);
+            return ret;
+        default: return __pureDiv(other);
+        }
+    }
+
+    [mutating]
+    [require(hlsl)]
+    void __mutMod(This other)
+    { __target_switch { case hlsl: __intrinsic_asm ".Mod"; } }
+
+    [ForceInline]
+    This mod(This other)
+    {
+        __target_switch
+        {
+        case hlsl:
+            This ret = this;
+            ret.__mutMod(other);
+            return ret;
+        default:
+            This ret;
+            for(int i = 0; i < N; ++i)
+                ret[i] = this[i] % other[i];
+            return ret;
+        }
+    }
+
+    __intrinsic_op($(kIROp_Neg))
+    This __pureNeg(This other);
+
+    //[ForceInline]
+    This neg()
+    {
+        __target_switch
+        {
+        case hlsl:
+            This ret = this;
+            for(int i = 0; i < N; ++i)
+                ret[i] = -this[i];
+            return ret;
+        default: return __pureNeg(this);
+        }
+    }
+
+    [mutating]
+    [require(hlsl)]
+    void __mutScalarMul(T t)
+    { __target_switch { case hlsl: __intrinsic_asm ".ScalarMultiply"; } }
+
+    [mutating]
+    [require(hlsl)]
+    void __mutMin(This other)
+    { __target_switch { case hlsl: __intrinsic_asm ".Min"; } }
+    [mutating]
+    [require(hlsl)]
+    void __mutMax(This other)
+    { __target_switch { case hlsl: __intrinsic_asm ".Max"; } }
+    [mutating]
+    [require(hlsl)]
+    void __mutClamp(This minVal, This maxVal)
+    { __target_switch { case hlsl: __intrinsic_asm ".Clamp"; } }
+
+    //
+    // Internal utilities for loading and storing
+    //
+
+    [mutating]
+    [require(hlsl, byteaddressbuffer)]
+    void __Load(const ByteAddressBuffer buffer, uint byteOffset, uint alignment = 0)
+    { __target_switch { case hlsl: __intrinsic_asm ".Load"; } }
+
+    [mutating]
+    [require(hlsl, byteaddressbuffer_rw)]
+    void __Load(const RWByteAddressBuffer buffer, uint byteOffset, uint alignment = 0)
+    { __target_switch { case hlsl: __intrinsic_asm ".Load"; } }
+
+    __generic<let M : int>
+    [mutating]
+    // Careful, this takes the offset in elements
+    [require(hlsl)]
+    void __Load(__constref groupshared T buffer[M], uint elemOffset)
+    { __target_switch { case hlsl: __intrinsic_asm ".Load"; } }
+
+    [require(hlsl, byteaddressbuffer_rw)]
+    void __Store(RWByteAddressBuffer buffer, uint byteOffset, uint alignment = 0)
+    { __target_switch { case hlsl: __intrinsic_asm ".Store"; } }
+
+    __generic<let M : int>
+    [require(hlsl)]
+    // Careful, this takes the offset in elements
+    void __Store(__ref groupshared T buffer[M], uint elemOffset)
+    { __target_switch { case hlsl: __intrinsic_asm ".Store"; } }
+
+${{{{
+static const struct {
+    bool isRW;
+    char const* type;
+} kByteAddressBufferCases[] =
+{
+    {true, "RWByteAddressBuffer"},
+    {false, "ByteAddressBuffer"}
+};
+for(auto buffer : kByteAddressBufferCases) {
+}}}}
+    [mutating]
+    [require(hlsl, byteaddressbuffer_rw)]
+    void __mutMatMul<U : __BuiltinArithmeticType, let K : int>(
+        CoopVec<U, K> input, uint inputInterpretationHLSL,
+        $(buffer.type) matrix, uint matrixOffset, uint matrixInterpretationHLSL,
+        uint m, uint k, uint memoryLayoutHLSL, bool transpose, uint matrixStride)
+    {
+        __target_switch
+        {
+        case hlsl: __intrinsic_asm ".MatMul";
+        }
+    }
+
+    [mutating]
+    [require(hlsl, byteaddressbuffer_rw)]
+    void __mutMatMulAdd<U : __BuiltinArithmeticType, let K : int>(
+        CoopVec<U, K> input, uint inputInterpretationHLSL,
+        $(buffer.type) matrix, uint matrixOffset, uint matrixInterpretationHLSL,
+        $(buffer.type) bias, uint biasOffset, uint biasInterpretationHLSL,
+        uint m, uint k, uint memoryLayoutHLSL, bool transpose, uint matrixStride)
+    {
+        __target_switch
+        {
+        case hlsl: __intrinsic_asm ".MatMulAdd";
+        }
+    }
+
+    [mutating]
+    [ForceInline]
+    void matMulAccumPacked<U : __BuiltinArithmeticType, let PackedK : int>(
+        CoopVec<U, PackedK> input,
+        constexpr CoopVecComponentType inputInterpretation,
+        constexpr int k,
+        $(buffer.type) matrix,
+        int32_t matrixOffset,
+        constexpr CoopVecComponentType matrixInterpretation,
+        constexpr CoopVecMatrixLayout memoryLayout,
+        constexpr bool transpose,
+        constexpr uint matrixStride
+    )
+    {
+        static_assert(__isPackedInputInterpretation(inputInterpretation) || k == PackedK
+                    , "for non-packed inputInterpretation values k must be equal to the input vector length");
+        static_assert(!__isPackedInputInterpretation(inputInterpretation)
+                    || k <= __inputInterpretationPackingFactor(inputInterpretation)*PackedK
+                    , "for packed inputInterpretation values k must be less than or equal to the input vector length times the packing factor");
+
+        __target_switch
+        {
+        case hlsl:
+            let inputInterpretationHLSL = __getHLSLCoopVecComponentType(inputInterpretation);
+            let matrixInterpretationHLSL = __getHLSLCoopVecComponentType(matrixInterpretation);
+            let memoryLayoutHLSL = __getHLSLCoopVecMatrixLayout(memoryLayout);
+            This temp = this;
+            temp.__mutMatMul(
+                input,
+                inputInterpretationHLSL,
+                matrix,
+                matrixOffset,
+                matrixInterpretationHLSL,
+                N,
+                k,
+                memoryLayoutHLSL,
+                transpose,
+                matrixStride
+            );
+            this.__mutAdd(temp);
+        default: this = this + coopVecMatMulPacked<T, N, PackedK, U>(
+                input,
+                inputInterpretation,
+                k,
+                matrix,
+                matrixOffset,
+                matrixInterpretation,
+                memoryLayout,
+                transpose,
+                matrixStride
+            );
+        }
+    }
+
+    [mutating]
+    [ForceInline]
+    void matMulAccum<U : __BuiltinArithmeticType, let K : int>(
+        CoopVec<U, K> input,
+        constexpr CoopVecComponentType inputInterpretation,
+        $(buffer.type) matrix,
+        int32_t matrixOffset,
+        constexpr CoopVecComponentType matrixInterpretation,
+        constexpr CoopVecMatrixLayout memoryLayout,
+        constexpr bool transpose,
+        constexpr uint matrixStride
+    )
+    {
+        static_assert(!__isPackedInputInterpretation(inputInterpretation)
+                    , "for packed inputInterpretation values please use coopVecMatMulPacked and specify k manually");
+        this.matMulAccumPacked<U, K>(
+            input,
+            inputInterpretation,
+            K,
+            matrix,
+            matrixOffset,
+            matrixInterpretation,
+            memoryLayout,
+            transpose,
+            matrixStride 
+        );
+    }
+
+    [mutating]
+    [ForceInline]
+    void matMulAddAccumPacked<U : __BuiltinArithmeticType, let PackedK : int>(
+        CoopVec<U, PackedK> input,
+        constexpr CoopVecComponentType inputInterpretation,
+        constexpr int k,
+        $(buffer.type) matrix,
+        int32_t matrixOffset,
+        constexpr CoopVecComponentType matrixInterpretation,
+        $(buffer.type) bias,
+        int32_t biasOffset,
+        constexpr CoopVecComponentType biasInterpretation,
+        constexpr CoopVecMatrixLayout memoryLayout,
+        constexpr bool transpose,
+        constexpr uint matrixStride
+    )
+    {
+        static_assert(__isPackedInputInterpretation(inputInterpretation) || k == PackedK
+                    , "for non-packed inputInterpretation values k must be equal to the input vector length");
+        static_assert(!__isPackedInputInterpretation(inputInterpretation)
+                    || k <= __inputInterpretationPackingFactor(inputInterpretation)*PackedK
+                    , "for packed inputInterpretation values k must be less than or equal to the input vector length times the packing factor");
+
+        __target_switch
+        {
+        case hlsl:
+            let inputInterpretationHLSL = __getHLSLCoopVecComponentType(inputInterpretation);
+            let matrixInterpretationHLSL = __getHLSLCoopVecComponentType(matrixInterpretation);
+            let biasInterpretationHLSL = __getHLSLCoopVecComponentType(biasInterpretation);
+            let memoryLayoutHLSL = __getHLSLCoopVecMatrixLayout(memoryLayout);
+            This temp = this;
+            temp.__mutMatMulAdd(
+                input,
+                inputInterpretationHLSL,
+                matrix,
+                matrixOffset,
+                matrixInterpretationHLSL,
+                bias,
+                biasOffset,
+                biasInterpretationHLSL,
+                N,
+                k,
+                memoryLayoutHLSL,
+                transpose,
+                matrixStride
+            );
+            this.__mutAdd(temp);
+        default: this = this + coopVecMatMulAddPacked<T, N, PackedK, U>(
+            input,
+            inputInterpretation,
+            k,
+            matrix,
+            matrixOffset,
+            matrixInterpretation,
+            bias,
+            biasOffset,
+            biasInterpretation,
+            memoryLayout,
+            transpose,
+            matrixStride 
+            );
+        }
+    }
+
+    [mutating]
+    [ForceInline]
+    void matMulAddAccum<U : __BuiltinArithmeticType, let K : int>(
+        CoopVec<U, K> input,
+        constexpr CoopVecComponentType inputInterpretation,
+        $(buffer.type) matrix,
+        int32_t matrixOffset,
+        constexpr CoopVecComponentType matrixInterpretation,
+        $(buffer.type) bias,
+        int32_t biasOffset,
+        constexpr CoopVecComponentType biasInterpretation,
+        constexpr CoopVecMatrixLayout memoryLayout,
+        constexpr bool transpose,
+        constexpr uint matrixStride
+    )
+    {
+        static_assert(!__isPackedInputInterpretation(inputInterpretation)
+                    , "for packed inputInterpretation values please use coopVecMatMulPacked and specify k manually");
+        this.matMulAddAccumPacked<U, K>(
+            input,
+            inputInterpretation,
+            K,
+            matrix,
+            matrixOffset,
+            matrixInterpretation,
+            bias,
+            biasOffset,
+            biasInterpretation,
+            memoryLayout,
+            transpose,
+            matrixStride
+        );
+    }
+
+
+${{{{
+}
+}}}}
+}
+
+__intrinsic_op($(kIROp_MakeCoopVectorFromValuePack))
+CoopVec<T, N> __makeCoopVec<T : __BuiltinArithmeticType, let N : int, each U>(expand each U args);
+
+__generic<T:__BuiltinArithmeticType, U:__BuiltinArithmeticType, let N : int>
+__intrinsic_op($(kIROp_IntCast))
+[require(cooperative_vector)]
+CoopVec<T,N> __int_cast(CoopVec<U,N> val);
+
+__generic<T:__BuiltinArithmeticType, U:__BuiltinArithmeticType, let N : int>
+__intrinsic_op($(kIROp_FloatCast))
+[require(cooperative_vector)]
+CoopVec<T,N> __real_cast(CoopVec<U,N> val);
+
+__generic<T:__BuiltinArithmeticType, U:__BuiltinArithmeticType, let N : int>
+__intrinsic_op($(kIROp_CastIntToFloat))
+[require(cooperative_vector)]
+CoopVec<T,N> __int_to_float_cast(CoopVec<U,N> val);
+
+__generic<T:__BuiltinArithmeticType, U:__BuiltinArithmeticType, let N : int>
+__intrinsic_op($(kIROp_CastFloatToInt))
+[require(cooperative_vector)]
+CoopVec<T,N> __float_to_int_cast(CoopVec<U,N> val);
+
+__generic<T : __BuiltinArithmeticType, let N : int>
+[ForceInline]
+[require(cooperative_vector)]
+CoopVec<T, N> operator *(CoopVec<T, N> lhs, const T rhs)
+{
+    __target_switch
+    {
+    case spirv:
+        if (__isFloat<T>())
+        {
+            return spirv_asm
+            {
+                result:$$CoopVec<T, N> = OpVectorTimesScalar $lhs $rhs;
+            };
+        }
+        else
+        {
+            for (int i = 0; i < N; ++i)
+            {
+                lhs[i] *= rhs;
+            }
+            return lhs;
+        }
+    case hlsl:
+        CoopVec<T, N> ret = lhs;
+        ret.__mutScalarMul(rhs);
+        return ret;
+    default:
+        for (int i = 0; i < N; ++i)
+        {
+            lhs[i] *= rhs;
+        }
+        return lhs;
+    }
+}
+
+__generic<T : __BuiltinArithmeticType, let N : int>
+[ForceInline]
+[require(cooperative_vector)]
+CoopVec<T, N> operator *(const T lhs, CoopVec<T, N> rhs)
+{
+    return rhs * lhs;
+}
+
+[ForceInline]
+[require(cooperative_vector)]
+CoopVec<T, N> min<T : __BuiltinFloatingPointType, let N : int>(CoopVec<T, N> x, CoopVec<T, N> y)
+{
+    __target_switch
+    {
+    case spirv:
+        return spirv_asm
+        {
+            result:$$CoopVec<T, N> = OpExtInst glsl450 FMin $x $y;
+        };
+    case hlsl:
+        CoopVec<T, N> ret = x;
+        ret.__mutMin(y);
+        return ret;
+    default:
+        CoopVec<T, N> ret;
+        for(int i = 0; i < N; ++i)
+            ret[i] = min(x[i], y[i]);
+
+        return ret;
+    }
+}
+
+[ForceInline]
+[require(cooperative_vector)]
+CoopVec<T, N> max<T : __BuiltinFloatingPointType, let N : int>(CoopVec<T, N> x, CoopVec<T, N> y)
+{
+    __target_switch
+    {
+    case spirv:
+        return spirv_asm
+        {
+            result:$$CoopVec<T, N> = OpExtInst glsl450 FMax $x $y;
+        };
+    case hlsl:
+        CoopVec<T, N> ret = x;
+        ret.__mutMax(y);
+        return ret;
+    default:
+        CoopVec<T, N> ret;
+        for(int i = 0; i < N; ++i)
+            ret[i] = max(x[i], y[i]);
+        return ret;
+    }
+}
+
+[ForceInline]
+[require(cooperative_vector)]
+CoopVec<T, N> clamp<T : __BuiltinFloatingPointType, let N : int>(CoopVec<T, N> x, CoopVec<T, N> minVal, CoopVec<T, N> maxVal)
+{
+    __target_switch
+    {
+    case spirv:
+        return spirv_asm
+        {
+            result:$$CoopVec<T, N> = OpExtInst glsl450 FClamp $x $minVal $maxVal;
+        };
+    case hlsl:
+        CoopVec<T, N> ret = x;
+        ret.__mutClamp(minVal, maxVal);
+        return ret;
+    default:
+        CoopVec<T, N> ret;
+        for(int i = 0; i < N; ++i)
+            ret[i] = clamp(x[i], minVal[i], maxVal[i]);
+        return ret;
+    }
+}
+
+[ForceInline]
+[require(cooperative_vector)]
+CoopVec<T, N> min<T : __BuiltinIntegerType, let N : int>(CoopVec<T, N> x, CoopVec<T, N> y)
+{
+    __target_switch
+    {
+    case spirv:
+        if (__isSignedInt<T>())
+        {
+            return spirv_asm
+            {
+                result:$$CoopVec<T, N> = OpExtInst glsl450 SMin $x $y
+            };
+        }
+        else
+        {
+            return spirv_asm
+            {
+                result:$$CoopVec<T, N> = OpExtInst glsl450 UMin $x $y
+            };
+        }
+    case hlsl:
+        CoopVec<T, N> ret = x;
+        ret.__mutMin(y);
+        return ret;
+    default:
+        CoopVec<T, N> ret;
+        for(int i = 0; i < N; ++i)
+            ret[i] = min(x[i], y[i]);
+
+        return ret;
+    }
+}
+
+// [ForceInline]
+[require(cooperative_vector)]
+CoopVec<T, N> max<T : __BuiltinIntegerType, let N : int>(CoopVec<T, N> x, CoopVec<T, N> y)
+{
+    __target_switch
+    {
+    case spirv:
+        if (__isSignedInt<T>())
+        {
+            return spirv_asm
+            {
+                result:$$CoopVec<T, N> = OpExtInst glsl450 SMax $x $y
+            };
+        }
+        else
+        {
+            return spirv_asm
+            {
+                result:$$CoopVec<T, N> = OpExtInst glsl450 UMax $x $y
+            };
+        }
+    case hlsl:
+        CoopVec<T, N> ret = x;
+        ret.__mutMax(y);
+        return ret;
+    default:
+        CoopVec<T, N> ret;
+        for(int i = 0; i < N; ++i)
+            ret[i] = max(x[i], y[i]);
+        return ret;
+    }
+}
+
+// [ForceInline]
+[require(cooperative_vector)]
+CoopVec<T, N> clamp<T : __BuiltinIntegerType, let N : int>(CoopVec<T, N> x, CoopVec<T, N> minVal, CoopVec<T, N> maxVal)
+{
+    __target_switch
+    {
+    case spirv:
+        if (__isSignedInt<T>())
+        {
+            return spirv_asm
+            {
+                result:$$CoopVec<T, N> = OpExtInst glsl450 SClamp $x $minVal $maxVal
+            };
+        }
+        else
+        {
+            return spirv_asm
+            {
+                result:$$CoopVec<T, N> = OpExtInst glsl450 UClamp $x $minVal $maxVal
+            };
+        }
+    case hlsl:
+        CoopVec<T, N> ret = x;
+        ret.__mutClamp(minVal, maxVal);
+        return ret;
+    default:
+        CoopVec<T, N> ret;
+        for(int i = 0; i < N; ++i)
+            ret[i] = clamp(x[i], minVal[i], maxVal[i]);
+        return ret;
+    }
+}
+
+// [ForceInline]
+[require(cooperative_vector)]
+CoopVec<T, N> step<T : __BuiltinFloatingPointType, let N : int>(CoopVec<T, N> edge, CoopVec<T, N> x)
+{
+    __target_switch
+    {
+    case spirv:
+        return spirv_asm
+        {
+            result:$$CoopVec<T, N> = OpExtInst glsl450 Step $edge $x;
+        };
+    default:
+        CoopVec<T, N> ret;
+        for(int i = 0; i < N; ++i)
+            ret[i] = step(edge[i], x[i]);
+        return ret;
+    }
+}
+
+// [ForceInline]
+[require(cooperative_vector)]
+CoopVec<T, N> exp<T : __BuiltinFloatingPointType, let N : int>(CoopVec<T, N> x)
+{
+    __target_switch
+    {
+    case spirv:
+        return spirv_asm
+        {
+            result:$$CoopVec<T, N> = OpExtInst glsl450 Exp $x;
+        };
+    default:
+        CoopVec<T, N> ret;
+        for(int i = 0; i < N; ++i)
+            ret[i] = exp(x[i]);
+        return ret;
+    }
+}
+
+// [ForceInline]
+[require(cooperative_vector)]
+CoopVec<T, N> log<T : __BuiltinFloatingPointType, let N : int>(CoopVec<T, N> x)
+{
+    __target_switch
+    {
+    case spirv:
+        return spirv_asm
+        {
+            result:$$CoopVec<T, N> = OpExtInst glsl450 Log $x;
+        };
+    default:
+        CoopVec<T, N> ret;
+        for(int i = 0; i < N; ++i)
+            ret[i] = log(x[i]);
+        return ret;
+    }
+}
+
+// [ForceInline]
+[require(cooperative_vector)]
+CoopVec<T, N> tanh<T : __BuiltinFloatingPointType, let N : int>(CoopVec<T, N> x)
+{
+    __target_switch
+    {
+    case spirv:
+        return spirv_asm
+        {
+            result:$$CoopVec<T, N> = OpExtInst glsl450 Tanh $x;
+        };
+    default:
+        CoopVec<T, N> ret;
+        for(int i = 0; i < N; ++i)
+            ret[i] = tanh(x[i]);
+        return ret;
+    }
+}
+
+// TODO: Why does this fail when inlined on HLSL,
+// We generate some really weird code...
+// [ForceInline]
+[require(cooperative_vector)]
+CoopVec<T, N> atan<T : __BuiltinFloatingPointType, let N : int>(CoopVec<T, N> yOverX)
+{
+    __target_switch
+    {
+    case spirv:
+        return spirv_asm
+        {
+            result:$$CoopVec<T, N> = OpExtInst glsl450 Atan $yOverX;
+        };
+    default:
+        CoopVec<T, N> ret;
+        for(int i = 0; i < N; ++i)
+            ret[i] = atan(yOverX[i]);
+        return ret;
+    }
+}
+
+// [ForceInline]
+[require(cooperative_vector)]
+CoopVec<T, N> fma<T : __BuiltinFloatingPointType, let N : int>(CoopVec<T, N> a, CoopVec<T, N> b, CoopVec<T, N> c)
+{
+    // TODO: Investigate, why does this fail if it's not inlined
+    // replacing fma with mad below also fixes things...
+    // dxc generated substantially different code
+    __target_switch
+    {
+    case spirv:
+        return spirv_asm
+        {
+            result:$$CoopVec<T, N> = OpExtInst glsl450 Fma $a $b $c;
+        };
+    default:
+        CoopVec<T, N> ret;
+        for(int i = 0; i < N; ++i)
+            ret[i] = mad(a[i], b[i], c[i]);
+        return ret;
+    }
+}
+
+// Buffers from which values of arbitrary type can be loaded from byte offsets
+interface IPhysicalBuffer
+{
+    [__unsafeForceInlineEarly]
+    T LoadByteOffset<T>(int offset);
+
+    [__unsafeForceInlineEarly]
+    Ptr<uint32_t[]> GetBufferPointer();
+}
+
+// Buffers to which values of arbitrary type can be stored at byte offsets
+interface IRWPhysicalBuffer : IPhysicalBuffer
+{
+    [__unsafeForceInlineEarly]
+    void StoreByteOffset<T>(int offset, T element);
+}
+
+extension ByteAddressBuffer : IPhysicalBuffer
+{
+    [__unsafeForceInlineEarly]
+    Ptr<uint32_t[]> GetBufferPointer()
+    {
+        return __getStructuredBufferPtr(__getEquivalentStructuredBuffer<uint32_t>(this));
+    }
+
+    [__unsafeForceInlineEarly]
+    T LoadByteOffset<T>(int offset)
+    {
+        return this.Load<T>(offset);
+    }
+}
+
+extension RWByteAddressBuffer : IPhysicalBuffer
+{
+    [__unsafeForceInlineEarly]
+    Ptr<uint32_t[]> GetBufferPointer()
+    {
+        return __getStructuredBufferPtr(__getEquivalentStructuredBuffer<uint32_t>(this));
+    }
+
+    [__unsafeForceInlineEarly]
+    T LoadByteOffset<T>(int offset)
+    {
+        return this.Load<T>(offset);
+    }
+}
+
+extension RWByteAddressBuffer : IRWPhysicalBuffer
+{
+    [__unsafeForceInlineEarly]
+    void StoreByteOffset<T>(int offset, T element)
+    {
+        return this.Store<T>(offset, element);
+    }
+}
+
+
+//
+// Convenience loading functions for cooperative vectors which infer the
+// element type for structured buffers and groupshared arrays (and ByteAddressBuffers for consistency
+//
+
+[ForceInline]
+[require(cooperative_vector)]
+CoopVec<T, N> coopVecLoad<let N : int, T : __BuiltinArithmeticType>(ByteAddressBuffer buffer, int32_t byteOffset16ByteAligned = 0)
+{
+    return CoopVec<T, N>.load(buffer, byteOffset16ByteAligned);
+}
+
+[ForceInline]
+[require(cooperative_vector)]
+CoopVec<T, N> coopVecLoad<let N : int, T : __BuiltinArithmeticType>(RWByteAddressBuffer buffer, int32_t byteOffset16ByteAligned = 0)
+{
+    return CoopVec<T, N>.load(buffer, byteOffset16ByteAligned);
+}
+
+[ForceInline]
+[require(cooperative_vector)]
+CoopVec<T, N> coopVecLoad<let N : int, T : __BuiltinArithmeticType>(StructuredBuffer<T> buffer, int32_t byteOffset16ByteAligned = 0)
+{
+    return CoopVec<T, N>.load(buffer, byteOffset16ByteAligned);
+}
+
+[ForceInline]
+[require(cooperative_vector)]
+CoopVec<T, N> coopVecLoad<let N : int, T : __BuiltinArithmeticType>(RWStructuredBuffer<T> buffer, int32_t byteOffset16ByteAligned = 0)
+{
+    return CoopVec<T, N>.load(buffer, byteOffset16ByteAligned);
+}
+
+// Groupshared
+[ForceInline]
+[require(cooperative_vector)]
+CoopVec<T, N> coopVecLoadGroupshared<let N : int, T : __BuiltinArithmeticType, let M : int>(__constref groupshared const T[M] data, int32_t byteOffset16ByteAligned = 0)
+{
+    return CoopVec<T, N>.load(data, byteOffset16ByteAligned);
+}
+
+//
+// Coop Vector matrix multiplication
+//
+
+enum CoopVecMatrixLayout
+{
+    RowMajor,
+    ColumnMajor,
+    InferencingOptimal,
+    TrainingOptimal
+};
+
+enum CoopVecComponentType
+{
+    FloatE4M3,
+    FloatE5M2,
+    Float16,
+    Float32,
+    Float64,
+    SignedInt8,
+    SignedInt16,
+    SignedInt32,
+    SignedInt64,
+    SignedInt8Packed,
+    UnsignedInt8,
+    UnsignedInt16,
+    UnsignedInt32,
+    UnsignedInt64,
+    UnsignedInt8Packed
+};
+
+[ForceInline]
+int __inputInterpretationPackingFactor(CoopVecComponentType componentType)
+{
+    switch (componentType)
+    {
+    case CoopVecComponentType::SignedInt8Packed:
+    case CoopVecComponentType::UnsignedInt8Packed:
+        return 4;
+    }
+    return 1;
+}
+
+[ForceInline]
+bool __isPackedInputInterpretation(CoopVecComponentType componentType)
+{
+    return __inputInterpretationPackingFactor(componentType) != 1;
+}
+
+// TODO: We might consider some way of specifying these from our lookup tables
+[ForceInline]
+uint32_t __getSpvCoopVecMatrixLayout(CoopVecMatrixLayout layout)
+{
+    switch (layout)
+    {
+    case CoopVecMatrixLayout::RowMajor:
+        return 0;
+    case CoopVecMatrixLayout::ColumnMajor:
+        return 1;
+    case CoopVecMatrixLayout::InferencingOptimal:
+        return 2;
+    case CoopVecMatrixLayout::TrainingOptimal:
+        return 3;
+    default:
+        static_assert(false, "unsupported layout value");
+    }
+    return 0xffffffff;
+}
+
+[ForceInline]
+uint32_t __getHLSLCoopVecMatrixLayout(CoopVecMatrixLayout layout)
+{
+    switch (layout)
+    {
+    // TODO: Check these are the same
+    case CoopVecMatrixLayout::RowMajor:
+        return 0;
+    case CoopVecMatrixLayout::ColumnMajor:
+        return 1;
+    case CoopVecMatrixLayout::InferencingOptimal:
+        return 2;
+    case CoopVecMatrixLayout::TrainingOptimal:
+        return 3;
+    default:
+        static_assert(false, "unsupported layout value");
+    }
+    return 0xffffffff;
+}
+
+[ForceInline]
+uint32_t __getSpvCoopVecComponentType(CoopVecComponentType componentType)
+{
+    switch (componentType)
+    {
+    case CoopVecComponentType::Float16:
+        return 0;
+    case CoopVecComponentType::Float32:
+        return 1;
+    case CoopVecComponentType::Float64:
+        return 2;
+    case CoopVecComponentType::SignedInt8:
+        return 3;
+    case CoopVecComponentType::SignedInt16:
+        return 4;
+    case CoopVecComponentType::SignedInt32:
+        return 5;
+    case CoopVecComponentType::SignedInt8Packed:
+        return 1000491000;
+    case CoopVecComponentType::SignedInt64:
+        return 6;
+    case CoopVecComponentType::UnsignedInt8:
+        return 7;
+    case CoopVecComponentType::UnsignedInt16:
+        return 8;
+    case CoopVecComponentType::UnsignedInt32:
+        return 9;
+    case CoopVecComponentType::UnsignedInt8Packed:
+        return 1000491001;
+    case CoopVecComponentType::UnsignedInt64:
+        return 10;
+    case CoopVecComponentType::FloatE4M3:
+        return 1000491002;
+    case CoopVecComponentType::FloatE5M2:
+        return 1000491003;
+    default:
+        static_assert(false, "unsupported componentType value");
+    }
+    return 0xffffffff;
+}
+
+[ForceInline]
+uint32_t __getHLSLCoopVecComponentType(CoopVecComponentType componentType)
+{
+    switch (componentType)
+    {
+    case CoopVecComponentType::Float16:
+        return 0;
+    case CoopVecComponentType::Float32:
+        return 1;
+    case CoopVecComponentType::UnsignedInt8:
+        return 2;
+    case CoopVecComponentType::UnsignedInt16:
+        return 3;
+    case CoopVecComponentType::UnsignedInt32:
+        return 4;
+    case CoopVecComponentType::SignedInt8:
+        return 5;
+    case CoopVecComponentType::SignedInt16:
+        return 6;
+    case CoopVecComponentType::SignedInt32:
+        return 7;
+    case CoopVecComponentType::SignedInt8Packed:
+        return 8;
+    case CoopVecComponentType::UnsignedInt8Packed:
+        return 9;
+    case CoopVecComponentType::FloatE4M3:
+        return 10;
+    case CoopVecComponentType::FloatE5M2:
+        return 11;
+    default:
+        static_assert(false, "unsupported componentType value");
+    }
+    return 32;
+}
+
+[ForceInline]
+uint32_t __coopVecComponentTypeStride(CoopVecComponentType componentType)
+{
+    switch (componentType)
+    {
+    case CoopVecComponentType::Float16:
+        return 2;
+    case CoopVecComponentType::Float32:
+        return 4;
+    case CoopVecComponentType::Float64:
+        return 8;
+    case CoopVecComponentType::SignedInt8:
+        return 1;
+    case CoopVecComponentType::SignedInt16:
+        return 2;
+    case CoopVecComponentType::SignedInt32:
+        return 4;
+    case CoopVecComponentType::SignedInt8Packed:
+        return 4;
+    case CoopVecComponentType::SignedInt64:
+        return 8;
+    case CoopVecComponentType::UnsignedInt8:
+        return 1;
+    case CoopVecComponentType::UnsignedInt16:
+        return 2;
+    case CoopVecComponentType::UnsignedInt32:
+        return 4;
+    case CoopVecComponentType::UnsignedInt8Packed:
+        return 4;
+    case CoopVecComponentType::UnsignedInt64:
+        return 8;
+    default:
+        static_assert(false, "unsupported componentType value");
+    }
+    return 0xffffffff;
+}
+
+${{{{
+static const struct {
+    bool isRW;
+    char const* type;
+} kByteAddressBufferCases_[] =
+{
+    {true, "RWByteAddressBuffer"},
+    {false, "ByteAddressBuffer"},
+};
+for(auto buffer : kByteAddressBufferCases_) {
+}}}}
+
+// TODO: Can we ForceInline for just hlsl? the other platforms don't really
+// need it
+[ForceInline]
+[require(cooperative_vector)]
+__generic<T : __BuiltinArithmeticType, let M : int, let PackedK : int, U : __BuiltinArithmeticType>
+CoopVec<T, M> coopVecMatMulPacked(
+    CoopVec<U, PackedK> input,
+    constexpr CoopVecComponentType inputInterpretation,
+    constexpr int k,
+    $(buffer.type) matrix,
+    int32_t matrixOffset,
+    constexpr CoopVecComponentType matrixInterpretation,
+    constexpr CoopVecMatrixLayout memoryLayout,
+    constexpr bool transpose,
+    constexpr uint matrixStride
+)
+{
+    static_assert(__isPackedInputInterpretation(inputInterpretation) || k == PackedK
+                 , "for non-packed inputInterpretation values k must be equal to the input vector length");
+    static_assert(!__isPackedInputInterpretation(inputInterpretation)
+                || k <= __inputInterpretationPackingFactor(inputInterpretation)*PackedK
+                 , "for packed inputInterpretation values k must be less than or equal to the input vector length times the packing factor");
+
+    __target_switch
+    {
+    case spirv:
+        let m : int32_t = M;
+        let matrixInterpretationSpirv : int32_t = __getSpvCoopVecComponentType(matrixInterpretation);
+        let inputInterpretationSpirv : int32_t = __getSpvCoopVecComponentType(inputInterpretation);
+        let memoryLayoutSpirv : int32_t = __getSpvCoopVecMatrixLayout(memoryLayout);
+        let matrixPtr = matrix.GetBufferPointer();
+        return spirv_asm
+        {
+            result:$$CoopVec<T, M> = OpCooperativeVectorMatrixMulNV $input $inputInterpretationSpirv $matrixPtr $matrixOffset $matrixInterpretationSpirv $m $k $memoryLayoutSpirv $transpose $matrixStride;
+        };
+
+    case hlsl:
+        var ret = CoopVec<T, M>(0);
+        let inputInterpretationHLSL = __getHLSLCoopVecComponentType(inputInterpretation);
+        let matrixInterpretationHLSL = __getHLSLCoopVecComponentType(matrixInterpretation);
+        let memoryLayoutHLSL = __getHLSLCoopVecMatrixLayout(memoryLayout);
+        ret.__mutMatMul(
+             input,
+             inputInterpretationHLSL,
+             matrix,
+             matrixOffset,
+             matrixInterpretationHLSL,
+             M,
+             k,
+             memoryLayoutHLSL,
+             transpose,
+             matrixStride
+        );
+        return ret;
+
+    default:
+        var result = CoopVec<T, M>(0);
+        var v = CoopVec<T, PackedK*4>();
+        // TODO: Insert language from the spec to describe this madness
+        if(k == PackedK)
+        {
+            for(int i = 0; i < k; ++i)
+                v[i] = __arithmetic_cast<T>(input[i]);
+        }
+        else
+        {
+            static_assert(k == PackedK*4, "K must be 4 * PackedK for the non-spirv coopVecMatMulPacked backend");
+            static_assert(inputInterpretation == CoopVecComponentType::SignedInt8Packed ||
+                          inputInterpretation == CoopVecComponentType::UnsignedInt8Packed,
+                          "Packing is only supported for 4*int8 or 4*uint8 vectors");
+            for(int i = 0; i < k; ++i)
+            {
+                let n = __arithmetic_cast<int32_t>(input[i/4]);
+                let s = int8_t(n >> ((i % 4) * 8) & 0xff);
+                v[i] = T(s);
+            }
+        }
+
+        for (int i = 0; i < M; ++i)
+        {
+            for (int j = 0; j < k; ++j)
+            {
+                int row = (transpose ^ memoryLayout == CoopVecMatrixLayout::ColumnMajor) ? j : i;
+                int col = (transpose ^ memoryLayout == CoopVecMatrixLayout::ColumnMajor) ? i : j;
+                int offset = matrixOffset + (row * matrixStride + col * __coopVecComponentTypeStride(matrixInterpretation));
+
+                switch (matrixInterpretation)
+                {
+                    case CoopVecComponentType::Float16:
+                        result[i] += __arithmetic_cast<T>(matrix.LoadByteOffset<half>(offset)) * v[j];
+                        break;
+                    case CoopVecComponentType::Float32:
+                        result[i] += __arithmetic_cast<T>(matrix.LoadByteOffset<float>(offset)) * v[j];
+                        break;
+                    case CoopVecComponentType::Float64:
+                        result[i] += __arithmetic_cast<T>(matrix.LoadByteOffset<double>(offset)) * v[j];
+                        break;
+                    case CoopVecComponentType::SignedInt8:
+                        result[i] += __arithmetic_cast<T>(matrix.LoadByteOffset<int8_t>(offset)) * v[j];
+                        break;
+                    case CoopVecComponentType::SignedInt16:
+                        result[i] += __arithmetic_cast<T>(matrix.LoadByteOffset<int16_t>(offset)) * v[j];
+                        break;
+                    case CoopVecComponentType::SignedInt32:
+                        result[i] += __arithmetic_cast<T>(matrix.LoadByteOffset<int32_t>(offset)) * v[j];
+                        break;
+                    case CoopVecComponentType::SignedInt64:
+                        result[i] += __arithmetic_cast<T>(matrix.LoadByteOffset<int64_t>(offset)) * v[j];
+                        break;
+                    case CoopVecComponentType::SignedInt8Packed:
+                        result[i] += __arithmetic_cast<T>(matrix.LoadByteOffset<int8_t>(offset)) * v[j];
+                        break;
+                    case CoopVecComponentType::UnsignedInt8:
+                        result[i] += __arithmetic_cast<T>(matrix.LoadByteOffset<uint8_t>(offset)) * v[j];
+                        break;
+                    case CoopVecComponentType::UnsignedInt16:
+                        result[i] += __arithmetic_cast<T>(matrix.LoadByteOffset<uint16_t>(offset)) * v[j];
+                        break;
+                    case CoopVecComponentType::UnsignedInt32:
+                        result[i] += __arithmetic_cast<T>(matrix.LoadByteOffset<uint32_t>(offset)) * v[j];
+                        break;
+                    case CoopVecComponentType::UnsignedInt64:
+                        result[i] += __arithmetic_cast<T>(matrix.LoadByteOffset<uint64_t>(offset)) * v[j];
+                        break;
+                    case CoopVecComponentType::UnsignedInt8Packed:
+                        result[i] += __arithmetic_cast<T>(matrix.LoadByteOffset<uint8_t>(offset)) * v[j];
+                        break;
+                }
+            }
+        }
+
+        return result;
+    }
+}
+
+[ForceInline]
+[require(cooperative_vector)]
+__generic<T : __BuiltinArithmeticType, let M : int, let K : int, U : __BuiltinArithmeticType>
+CoopVec<T, M> coopVecMatMul(
+    CoopVec<U, K> input,
+    constexpr CoopVecComponentType inputInterpretation,
+    $(buffer.type) matrix,
+    int32_t matrixOffset,
+    constexpr CoopVecComponentType matrixInterpretation,
+    constexpr CoopVecMatrixLayout memoryLayout,
+    constexpr bool transpose,
+    constexpr uint matrixStride
+)
+{
+    static_assert(!__isPackedInputInterpretation(inputInterpretation)
+                 , "for packed inputInterpretation values please use coopVecMatMulPacked and specify k manually");
+    return coopVecMatMulPacked<
+        T, M, K, U>(
+        input,
+        inputInterpretation,
+        K,
+        matrix,
+        matrixOffset,
+        matrixInterpretation,
+        memoryLayout,
+        transpose,
+        matrixStride);
+}
+
+[ForceInline]
+[require(cooperative_vector)]
+CoopVec<T, M> coopVecMatMulAddPacked<T : __BuiltinArithmeticType, let M : int, let PackedK : int, U : __BuiltinArithmeticType>(
+    CoopVec<U, PackedK> input,
+    constexpr CoopVecComponentType inputInterpretation,
+    constexpr int k,
+    $(buffer.type) matrix,
+    int32_t matrixOffset,
+    constexpr CoopVecComponentType matrixInterpretation,
+    $(buffer.type) bias,
+    int32_t biasOffset,
+    constexpr CoopVecComponentType biasInterpretation,
+    constexpr CoopVecMatrixLayout memoryLayout,
+    constexpr bool transpose,
+    constexpr uint matrixStride
+)
+{
+    static_assert(__isPackedInputInterpretation(inputInterpretation) || k == PackedK
+                 , "for non-packed inputInterpretation values k must be equal to the input vector length");
+    static_assert(!__isPackedInputInterpretation(inputInterpretation)
+                || k <= __inputInterpretationPackingFactor(inputInterpretation)*PackedK
+                 , "for packed inputInterpretation values k must be less than or equal to the input vector length times the packing factor");
+
+    __target_switch
+    {
+    case spirv:
+        let m : int32_t = M;
+        let matrixInterpretationSpirv : int32_t = __getSpvCoopVecComponentType(matrixInterpretation);
+        let biasInterpretationSpirv : int32_t = __getSpvCoopVecComponentType(biasInterpretation);
+        let inputInterpretationSpirv : int32_t = __getSpvCoopVecComponentType(inputInterpretation);
+        let memoryLayoutSpirv : int32_t = __getSpvCoopVecMatrixLayout(memoryLayout);
+        let matrixPtr = matrix.GetBufferPointer();
+        let biasPtr = bias.GetBufferPointer();
+        return spirv_asm
+        {
+            result:$$CoopVec<T, M> = OpCooperativeVectorMatrixMulAddNV $input $inputInterpretationSpirv $matrixPtr $matrixOffset $matrixInterpretationSpirv $biasPtr $biasOffset $biasInterpretationSpirv $m $k $memoryLayoutSpirv $transpose $matrixStride;
+        };
+
+    case hlsl:
+        var ret = CoopVec<T, M>(0);
+        let inputInterpretationHLSL = __getHLSLCoopVecComponentType(inputInterpretation);
+        let matrixInterpretationHLSL = __getHLSLCoopVecComponentType(matrixInterpretation);
+        let biasInterpretationHLSL = __getHLSLCoopVecComponentType(biasInterpretation);
+        let memoryLayoutHLSL = __getHLSLCoopVecMatrixLayout(memoryLayout);
+        ret.__mutMatMulAdd(
+             input,
+             inputInterpretationHLSL,
+             matrix,
+             matrixOffset,
+             matrixInterpretationHLSL,
+             bias,
+             biasOffset,
+             biasInterpretationHLSL,
+             M,
+             k,
+             memoryLayoutHLSL,
+             transpose,
+             matrixStride
+        );
+        return ret;
+
+    default:
+        var result = coopVecMatMulPacked<T, M, PackedK, U>(
+            input,
+            inputInterpretation,
+            k,
+            matrix,
+            matrixOffset,
+            matrixInterpretation,
+            memoryLayout,
+            transpose,
+            matrixStride);
+
+        for (int i = 0; i < M; ++i)
+        {
+            int b = biasOffset + i * __coopVecComponentTypeStride(biasInterpretation);
+            switch (biasInterpretation)
+            {
+                case CoopVecComponentType::Float16:
+                    result[i] += __arithmetic_cast<T>(bias.LoadByteOffset<half>(b));
+                    break;
+                case CoopVecComponentType::Float32:
+                    result[i] += __arithmetic_cast<T>(bias.LoadByteOffset<float>(b));
+                    break;
+                case CoopVecComponentType::Float64:
+                    result[i] += __arithmetic_cast<T>(bias.LoadByteOffset<double>(b));
+                    break;
+                case CoopVecComponentType::SignedInt8:
+                    result[i] += __arithmetic_cast<T>(bias.LoadByteOffset<int8_t>(b));
+                    break;
+                case CoopVecComponentType::SignedInt16:
+                    result[i] += __arithmetic_cast<T>(bias.LoadByteOffset<int16_t>(b));
+                    break;
+                case CoopVecComponentType::SignedInt32:
+                    result[i] += __arithmetic_cast<T>(bias.LoadByteOffset<int32_t>(b));
+                    break;
+                case CoopVecComponentType::SignedInt64:
+                    result[i] += __arithmetic_cast<T>(bias.LoadByteOffset<int64_t>(b));
+                    break;
+                case CoopVecComponentType::SignedInt8Packed:
+                    result[i] += __arithmetic_cast<T>(bias.LoadByteOffset<int8_t>(b));
+                    break;
+                case CoopVecComponentType::UnsignedInt8:
+                    result[i] += __arithmetic_cast<T>(bias.LoadByteOffset<uint8_t>(b));
+                    break;
+                case CoopVecComponentType::UnsignedInt16:
+                    result[i] += __arithmetic_cast<T>(bias.LoadByteOffset<uint16_t>(b));
+                    break;
+                case CoopVecComponentType::UnsignedInt32:
+                    result[i] += __arithmetic_cast<T>(bias.LoadByteOffset<uint32_t>(b));
+                    break;
+                case CoopVecComponentType::UnsignedInt64:
+                    result[i] += __arithmetic_cast<T>(bias.LoadByteOffset<uint64_t>(b));
+                    break;
+                case CoopVecComponentType::UnsignedInt8Packed:
+                    result[i] += __arithmetic_cast<T>(bias.LoadByteOffset<uint8_t>(b));
+                    break;
+            }
+        }
+
+        return result;
+    }
+}
+
+[ForceInline]
+[require(cooperative_vector)]
+__generic<T : __BuiltinArithmeticType, let M : int, let K : int, U : __BuiltinArithmeticType>
+CoopVec<T, M> coopVecMatMulAdd(
+    CoopVec<U, K> input,
+    constexpr CoopVecComponentType inputInterpretation,
+    $(buffer.type) matrix,
+    int32_t matrixOffset,
+    constexpr CoopVecComponentType matrixInterpretation,
+    $(buffer.type) bias,
+    int32_t biasOffset,
+    constexpr CoopVecComponentType biasInterpretation,
+    constexpr CoopVecMatrixLayout memoryLayout,
+    constexpr bool transpose,
+    constexpr uint matrixStride
+)
+{
+    static_assert(!__isPackedInputInterpretation(inputInterpretation)
+                 , "for packed inputInterpretation values please use coopVecMatMulPacked and specify k manually");
+    return coopVecMatMulAddPacked<
+        T, M, K, U>(
+        input,
+        inputInterpretation,
+        K,
+        matrix,
+        matrixOffset,
+        matrixInterpretation,
+        bias,
+        biasOffset,
+        biasInterpretation,
+        memoryLayout,
+        transpose,
+        matrixStride);
+}
+
+//
+// Coop Vector accumulation
+//
+
+${{{{
+if(buffer.isRW)
+{
+}}}}
+[require(cooperative_vector)]
+void coopVecOuterProductAccumulate<T : __BuiltinArithmeticType, let M : int, let N : int>(
+    CoopVec<T, M> a,
+    CoopVec<T, N> b,
+    $(buffer.type) matrix,
+    int32_t matrixOffset,
+    constexpr uint matrixStride,
+    constexpr CoopVecMatrixLayout memoryLayout,
+    constexpr CoopVecComponentType matrixInterpretation,
+)
+{
+    __target_switch
+    {
+    case hlsl:
+        __intrinsic_asm "$0.OuterProductAccumulate($1, $2, $3, $4, $5, $6)";
+    case spirv:
+        let matrixInterpretationSpirv : int = __getSpvCoopVecComponentType(matrixInterpretation);
+        let memoryLayoutSpirv : int = __getSpvCoopVecMatrixLayout(memoryLayout);
+        let matrixPtr = matrix.GetBufferPointer();
+        spirv_asm
+        {
+            OpCapability CooperativeVectorTrainingNV;
+            OpCooperativeVectorOuterProductAccumulateNV $matrixPtr $matrixOffset $a $b $memoryLayoutSpirv $matrixInterpretationSpirv $matrixStride;
+        };
+    default:
+        for (int i = 0; i < M; ++i)
+        {
+            for (int j = 0; j < N; ++j)
+            {
+                T product = a[i] * b[j];
+                int row = (memoryLayout == CoopVecMatrixLayout::ColumnMajor) ? j : i;
+                int col = (memoryLayout == CoopVecMatrixLayout::ColumnMajor) ? i : j;
+                int offset = matrixOffset + (row * matrixStride + col * __coopVecComponentTypeStride(matrixInterpretation));
+
+                switch (matrixInterpretation)
+                {
+                    case CoopVecComponentType::Float16:
+                        matrix.StoreByteOffset<half>(offset, matrix.LoadByteOffset<half>(offset) + __arithmetic_cast<half>(product));
+                        break;
+                    case CoopVecComponentType::Float32:
+                        matrix.StoreByteOffset<float>(offset, matrix.LoadByteOffset<float>(offset) + __arithmetic_cast<float>(product));
+                        break;
+                    case CoopVecComponentType::Float64:
+                        matrix.StoreByteOffset<double>(offset, matrix.LoadByteOffset<double>(offset) + __arithmetic_cast<double>(product));
+                        break;
+                    case CoopVecComponentType::SignedInt8:
+                        matrix.StoreByteOffset<int8_t>(offset, matrix.LoadByteOffset<int8_t>(offset) + __arithmetic_cast<int8_t>(product));
+                        break;
+                    case CoopVecComponentType::SignedInt16:
+                        matrix.StoreByteOffset<int16_t>(offset, matrix.LoadByteOffset<int16_t>(offset) + __arithmetic_cast<int16_t>(product));
+                        break;
+                    case CoopVecComponentType::SignedInt32:
+                        matrix.StoreByteOffset<int32_t>(offset, matrix.LoadByteOffset<int32_t>(offset) + __arithmetic_cast<int32_t>(product));
+                        break;
+                    case CoopVecComponentType::SignedInt64:
+                        matrix.StoreByteOffset<int64_t>(offset, matrix.LoadByteOffset<int64_t>(offset) + __arithmetic_cast<int64_t>(product));
+                        break;
+                    case CoopVecComponentType::SignedInt8Packed:
+                        matrix.StoreByteOffset<int8_t>(offset, matrix.LoadByteOffset<int8_t>(offset) + __arithmetic_cast<int8_t>(product));
+                        break;
+                    case CoopVecComponentType::UnsignedInt8:
+                        matrix.StoreByteOffset<uint8_t>(offset, matrix.LoadByteOffset<uint8_t>(offset) + __arithmetic_cast<uint8_t>(product));
+                        break;
+                    case CoopVecComponentType::UnsignedInt16:
+                        matrix.StoreByteOffset<uint16_t>(offset, matrix.LoadByteOffset<uint16_t>(offset) + __arithmetic_cast<uint16_t>(product));
+                        break;
+                    case CoopVecComponentType::UnsignedInt32:
+                        matrix.StoreByteOffset<uint32_t>(offset, matrix.LoadByteOffset<uint32_t>(offset) + __arithmetic_cast<uint32_t>(product));
+                        break;
+                    case CoopVecComponentType::UnsignedInt64:
+                        matrix.StoreByteOffset<uint64_t>(offset, matrix.LoadByteOffset<uint64_t>(offset) + __arithmetic_cast<uint64_t>(product));
+                        break;
+                    case CoopVecComponentType::UnsignedInt8Packed:
+                        matrix.StoreByteOffset<uint8_t>(offset, matrix.LoadByteOffset<uint8_t>(offset) + __arithmetic_cast<uint8_t>(product));
+                        break;
+                }
+            }
+        }
+    }
+}
+
+[require(cooperative_vector)]
+void coopVecReduceSumAccumulate<T : __BuiltinArithmeticType, let N : int>(
+    CoopVec<T, N> v,
+    $(buffer.type) buffer,
+    int32_t offset
+)
+{
+    __target_switch
+    {
+    case hlsl:
+        __intrinsic_asm "$0.ReduceSumAccumulate($1, $2)";
+    case spirv:
+        let bufferPtr = buffer.GetBufferPointer();
+        spirv_asm
+        {
+            OpCapability CooperativeVectorTrainingNV;
+            OpCooperativeVectorReduceSumAccumulateNV $bufferPtr $offset $v;
+        };
+    default:
+        for (int i = 0; i < N; ++i)
+        {
+            int byteOffset = offset + i * __naturalStrideOf<T>();
+            T currentValue = buffer.LoadByteOffset<T>(byteOffset);
+            T newValue = currentValue + __arithmetic_cast<T>(v[i]);
+            buffer.StoreByteOffset(byteOffset, newValue);
+        }
+    }
+}
+
+${{{{
+} // if rw
+} // buffer type loop
+}}}}
+
+${{{{
+static const struct {
+    bool isRW;
+    char const* type;
+} kStructuredBufferCases_[] =
+{
+    {true, "RWStructuredBuffer<IgnoredBufferElementType>"},
+    {false, "StructuredBuffer<IgnoredBufferElementType>"},
+};
+for(auto buffer : kStructuredBufferCases_) {
+}}}}
+
+[require(spirv, cooperative_vector)]
+__generic<T : __BuiltinArithmeticType, let M : int, let PackedK : int, U : __BuiltinArithmeticType,IgnoredBufferElementType>
+CoopVec<T, M> coopVecMatMulPacked(
+    CoopVec<U, PackedK> input,
+    constexpr CoopVecComponentType inputInterpretation,
+    constexpr int k,
+    $(buffer.type) matrix,
+    int32_t matrixOffset,
+    constexpr CoopVecComponentType matrixInterpretation,
+    constexpr CoopVecMatrixLayout memoryLayout,
+    constexpr bool transpose,
+    constexpr uint matrixStride
+)
+{
+    static_assert(__isPackedInputInterpretation(inputInterpretation) || k == PackedK
+                 , "for non-packed inputInterpretation values k must be equal to the input vector length");
+    static_assert(!__isPackedInputInterpretation(inputInterpretation)
+                || k <= __inputInterpretationPackingFactor(inputInterpretation)*PackedK
+                 , "for packed inputInterpretation values k must be less than or equal to the input vector length times the packing factor");
+    __target_switch
+    {
+    case spirv:
+        let m : int32_t = M;
+        let matrixInterpretationSpirv : int32_t = __getSpvCoopVecComponentType(matrixInterpretation);
+        let inputInterpretationSpirv : int32_t = __getSpvCoopVecComponentType(inputInterpretation);
+        let memoryLayoutSpirv : int32_t = __getSpvCoopVecMatrixLayout(memoryLayout);
+        let matrixPtr = __getStructuredBufferPtr(matrix);
+        return spirv_asm
+        {
+            result:$$CoopVec<T, M> = OpCooperativeVectorMatrixMulNV $input $inputInterpretationSpirv $matrixPtr $matrixOffset $matrixInterpretationSpirv $m $k $memoryLayoutSpirv $transpose $matrixStride;
+        };
+    }
+}
+
+// specialized coopVecMatMul for non-packed inputs
+[require(spirv, cooperative_vector)]
+__generic<T : __BuiltinArithmeticType, let M : int, let K : int, U : __BuiltinArithmeticType,IgnoredBufferElementType>
+CoopVec<T, M> coopVecMatMul(
+    CoopVec<U, K> input,
+    constexpr CoopVecComponentType inputInterpretation,
+    $(buffer.type) matrix,
+    int32_t matrixOffset,
+    constexpr CoopVecComponentType matrixInterpretation,
+    constexpr CoopVecMatrixLayout memoryLayout,
+    constexpr bool transpose,
+    constexpr uint matrixStride
+)
+{
+    static_assert(!__isPackedInputInterpretation(inputInterpretation)
+                 , "for packed inputInterpretation values please use coopVecMatMulPacked and specify k manually");
+    return coopVecMatMulPacked<
+        T, M, K, U, IgnoredBufferElementType>(
+        input,
+        inputInterpretation,
+        K,
+        matrix,
+        matrixOffset,
+        matrixInterpretation,
+        memoryLayout,
+        transpose,
+        matrixStride);
+}
+
+[require(spirv, cooperative_vector)]
+CoopVec<T, M> coopVecMatMulAddPacked<T : __BuiltinArithmeticType, let M : int, let PackedK : int, U : __BuiltinArithmeticType, IgnoredBufferElementType>(
+    CoopVec<U, PackedK> input,
+    constexpr CoopVecComponentType inputInterpretation,
+    constexpr int k,
+    $(buffer.type) matrix,
+    int32_t matrixOffset,
+    constexpr CoopVecComponentType matrixInterpretation,
+    $(buffer.type) bias,
+    int32_t biasOffset,
+    constexpr CoopVecComponentType biasInterpretation,
+    constexpr CoopVecMatrixLayout memoryLayout,
+    constexpr bool transpose,
+    constexpr uint matrixStride
+)
+{
+    static_assert(__isPackedInputInterpretation(inputInterpretation) || k == PackedK
+                 , "for non-packed inputInterpretation values k must be equal to the input vector length");
+    static_assert(!__isPackedInputInterpretation(inputInterpretation)
+                || k <= __inputInterpretationPackingFactor(inputInterpretation)*PackedK
+                 , "for packed inputInterpretation values k must be less than or equal to the input vector length times the packing factor");
+
+    __target_switch
+    {
+    case spirv:
+        let m : int32_t = M;
+        let matrixInterpretationSpirv : int32_t = __getSpvCoopVecComponentType(matrixInterpretation);
+        let biasInterpretationSpirv : int32_t = __getSpvCoopVecComponentType(biasInterpretation);
+        let inputInterpretationSpirv : int32_t = __getSpvCoopVecComponentType(inputInterpretation);
+        let memoryLayoutSpirv : int32_t = __getSpvCoopVecMatrixLayout(memoryLayout);
+        let matrixPtr = __getStructuredBufferPtr(matrix);
+        let biasPtr = __getStructuredBufferPtr(bias);
+        return spirv_asm
+        {
+            result:$$CoopVec<T, M> = OpCooperativeVectorMatrixMulAddNV $input $inputInterpretationSpirv $matrixPtr $matrixOffset $matrixInterpretationSpirv $biasPtr $biasOffset $biasInterpretationSpirv $m $k $memoryLayoutSpirv $transpose $matrixStride;
+        };
+    }
+}
+
+[require(spirv, cooperative_vector)]
+CoopVec<T, M> coopVecMatMulAdd<T : __BuiltinArithmeticType, let M : int, let K : int, U : __BuiltinArithmeticType, IgnoredBufferElementType>(
+    CoopVec<U, K> input,
+    constexpr CoopVecComponentType inputInterpretation,
+    $(buffer.type) matrix,
+    int32_t matrixOffset,
+    constexpr CoopVecComponentType matrixInterpretation,
+    $(buffer.type) bias,
+    int32_t biasOffset,
+    constexpr CoopVecComponentType biasInterpretation,
+    constexpr CoopVecMatrixLayout memoryLayout,
+    constexpr bool transpose,
+    constexpr uint matrixStride
+)
+{
+    static_assert(!__isPackedInputInterpretation(inputInterpretation)
+                 , "for packed inputInterpretation values please use coopVecMatMulPacked and specify k manually");
+    return coopVecMatMulAddPacked<
+        T, M, K, U, IgnoredBufferElementType>(
+        input,
+        inputInterpretation,
+        K,
+        matrix,
+        matrixOffset,
+        matrixInterpretation,
+        bias,
+        biasOffset,
+        biasInterpretation,
+        memoryLayout,
+        transpose,
+        matrixStride);
+}
+
+//
+// Coop Vector accumulation
+//
+
+${{{{
+if(buffer.isRW)
+{
+}}}}
+[require(spirv, cooperative_vector_training)]
+void coopVecOuterProductAccumulate<T : __BuiltinArithmeticType, let M : int, let N : int, IgnoredBufferElementType>(
+    CoopVec<T, M> a,
+    CoopVec<T, N> b,
+    $(buffer.type) matrix,
+    int32_t matrixOffset,
+    constexpr uint matrixStride,
+    constexpr CoopVecMatrixLayout memoryLayout,
+    constexpr CoopVecComponentType matrixInterpretation,
+)
+{
+    __target_switch
+    {
+    case spirv:
+        let matrixInterpretationSpirv : int = __getSpvCoopVecComponentType(matrixInterpretation);
+        let memoryLayoutSpirv : int = __getSpvCoopVecMatrixLayout(memoryLayout);
+        let matrixPtr = __getStructuredBufferPtr(matrix);
+        spirv_asm
+        {
+            OpCapability CooperativeVectorTrainingNV;
+            OpCooperativeVectorOuterProductAccumulateNV $matrixPtr $matrixOffset $a $b $memoryLayoutSpirv $matrixInterpretationSpirv $matrixStride;
+        };
+    }
+}
+
+[require(spirv, cooperative_vector_training)]
+void coopVecReduceSumAccumulate<T : __BuiltinArithmeticType, let N : int, IgnoredBufferElementType>(
+    CoopVec<T, N> v,
+    $(buffer.type) buffer,
+    int32_t offset
+)
+{
+    __target_switch
+    {
+    case spirv:
+        let bufferPtr = __getStructuredBufferPtr(buffer);
+        spirv_asm
+        {
+            OpCapability CooperativeVectorTrainingNV;
+            OpCooperativeVectorReduceSumAccumulateNV $bufferPtr $offset $v;
+        };
+    }
+}
+
+${{{{
+} // if rw
+} // buffer type loop
+}}}}
+
+
+[require(spirv, cooperative_vector_training)]
+void coopVecOuterProductAccumulate<T : __BuiltinArithmeticType, let M : int, let N : int, U : __BuiltinArithmeticType, let IgnoredBufferSize : int>(
+    CoopVec<T, M> a,
+    CoopVec<T, N> b,
+    __ref groupshared U[IgnoredBufferSize] matrix,
+    int32_t matrixOffset,
+    constexpr uint matrixStride,
+    constexpr CoopVecMatrixLayout memoryLayout,
+    constexpr CoopVecComponentType matrixInterpretation,
+)
+{
+    __target_switch
+    {
+    case spirv:
+        let matrixInterpretationSpirv : int = __getSpvCoopVecComponentType(matrixInterpretation);
+        let memoryLayoutSpirv : int = __getSpvCoopVecMatrixLayout(memoryLayout);
+        spirv_asm
+        {
+            OpCapability CooperativeVectorTrainingNV;
+            OpCooperativeVectorOuterProductAccumulateNV &matrix $matrixOffset $a $b $memoryLayoutSpirv $matrixInterpretationSpirv $matrixStride;
+        };
+    }
+}
+
+[require(spirv, cooperative_vector_training)]
+void coopVecReduceSumAccumulate<T : __BuiltinArithmeticType, let N : int, U, let IgnoredBufferSize : int>(
+    CoopVec<T, N> v,
+    __ref groupshared U[IgnoredBufferSize] buffer,
+    int32_t offset
+)
+{
+    __target_switch
+    {
+    case spirv:
+        spirv_asm
+        {
+            OpCapability CooperativeVectorTrainingNV;
+            OpCooperativeVectorReduceSumAccumulateNV &buffer $offset $v;
+        };
+    }
 }
 
 //@public:

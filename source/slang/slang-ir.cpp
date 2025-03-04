@@ -2678,6 +2678,11 @@ IRBasicType* IRBuilder::getUInt8Type()
     return (IRBasicType*)getType(kIROp_UInt8Type);
 }
 
+IRBasicType* IRBuilder::getFloatType()
+{
+    return (IRBasicType*)getType(kIROp_FloatType);
+}
+
 IRBasicType* IRBuilder::getCharType()
 {
     return (IRBasicType*)getType(kIROp_CharType);
@@ -2964,6 +2969,13 @@ IRVectorType* IRBuilder::getVectorType(IRType* elementType, IRIntegerValue eleme
     return getVectorType(elementType, getIntValue(getIntType(), elementCount));
 }
 
+IRCoopVectorType* IRBuilder::getCoopVectorType(IRType* elementType, IRInst* elementCount)
+{
+    IRInst* operands[] = {elementType, elementCount};
+    return (IRCoopVectorType*)
+        getType(kIROp_CoopVectorType, sizeof(operands) / sizeof(operands[0]), operands);
+}
+
 IRMatrixType* IRBuilder::getMatrixType(
     IRType* elementType,
     IRInst* rowCount,
@@ -3195,6 +3207,11 @@ void IRBuilder::setDataType(IRInst* inst, IRType* dataType)
         // No rate? Just clobber the data type.
         inst->setFullType(dataType);
     }
+}
+
+IRInst* IRBuilder::emitGetCurrentStage()
+{
+    return emitIntrinsicInst(getIntType(), kIROp_GetCurrentStage, 0, nullptr);
 }
 
 IRInst* IRBuilder::emitGetValueFromBoundInterface(IRType* type, IRInst* boundInterfaceValue)
@@ -3887,6 +3904,26 @@ IRInst* IRBuilder::emitDefaultConstruct(IRType* type, bool fallback)
                 return nullptr;
             return emitIntrinsicInst(type, kIROp_MakeVectorFromScalar, 1, &inner);
         }
+    case kIROp_CoopVectorType:
+        {
+            auto coopVecType = as<IRCoopVectorType>(actualType);
+            if (auto count = as<IRIntLit>(coopVecType->getElementCount()))
+            {
+                auto element = emitDefaultConstruct(coopVecType->getElementType(), fallback);
+                if (!element)
+                    return nullptr;
+                List<IRInst*> elements;
+                constexpr int maxCount = 4096;
+                if (count->getValue() > maxCount)
+                    break;
+                for (IRIntegerValue i = 0; i < count->getValue(); i++)
+                {
+                    elements.add(element);
+                }
+                return emitMakeCoopVector(type, elements.getCount(), elements.getBuffer());
+            }
+            break;
+        }
     case kIROp_MatrixType:
         {
             auto inner =
@@ -3958,7 +3995,7 @@ static TypeCastStyle _getTypeStyleId(IRType* type)
     }
 }
 
-IRInst* IRBuilder::emitCast(IRType* type, IRInst* value)
+IRInst* IRBuilder::emitCast(IRType* type, IRInst* value, bool fallbackToBuiltinCast)
 {
     if (isTypeEqual(type, value->getDataType()))
         return value;
@@ -3972,8 +4009,17 @@ IRInst* IRBuilder::emitCast(IRType* type, IRInst* value)
         SLANG_UNREACHABLE("cast from void type");
     }
 
-    SLANG_RELEASE_ASSERT(toStyle != TypeCastStyle::Unknown);
-    SLANG_RELEASE_ASSERT(fromStyle != TypeCastStyle::Unknown);
+    if (toStyle == TypeCastStyle::Unknown || fromStyle == TypeCastStyle::Unknown)
+    {
+        if (fallbackToBuiltinCast)
+        {
+            return emitIntrinsicInst(type, kIROp_BuiltinCast, 1, &value);
+        }
+        else
+        {
+            return nullptr;
+        }
+    }
 
     struct OpSeq
     {
@@ -4001,7 +4047,7 @@ IRInst* IRBuilder::emitCast(IRType* type, IRInst* value)
         /* From Float */
         {kIROp_CastFloatToInt,
          kIROp_FloatCast,
-         {kIROp_CastFloatToInt, kIROp_IntCast},
+         {kIROp_Neq},
          {kIROp_CastFloatToInt, kIROp_CastIntToPtr},
          kIROp_CastToVoid},
         /* From Bool  */
@@ -4020,8 +4066,26 @@ IRInst* IRBuilder::emitCast(IRType* type, IRInst* value)
     auto t = type;
     if (op.op1 != kIROp_Nop)
     {
-        t = getUInt64Type();
+        if (toStyle == TypeCastStyle::Bool)
+            t = getIntType();
+        else
+            t = getUInt64Type();
+        if (auto vecType = as<IRVectorType>(type))
+            t = getVectorType(t, vecType->getElementCount());
+        else if (auto matType = as<IRMatrixType>(type))
+            t = getMatrixType(
+                t,
+                matType->getRowCount(),
+                matType->getColumnCount(),
+                matType->getLayout());
     }
+
+    if (op.op0 == kIROp_Neq)
+    {
+        IRInst* args[2] = {value, emitDefaultConstruct(value->getDataType())};
+        return emitIntrinsicInst(type, op.op0, 2, args);
+    }
+
     auto result = emitIntrinsicInst(t, op.op0, 1, &value);
     if (op.op1 != kIROp_Nop)
     {
@@ -4169,6 +4233,18 @@ IRInst* IRBuilder::emitMakeString(IRInst* nativeStr)
 IRInst* IRBuilder::emitGetNativeString(IRInst* str)
 {
     return emitIntrinsicInst(getNativeStringType(), kIROp_getNativeStr, 1, &str);
+}
+
+IRInst* IRBuilder::emitGetElement(IRType* type, IRInst* arrayLikeType, IRIntegerValue element)
+{
+    IRInst* args[] = {arrayLikeType, getIntValue(getIntType(), element)};
+    return emitIntrinsicInst(type, kIROp_GetElement, 2, args);
+}
+
+IRInst* IRBuilder::emitGetElementPtr(IRType* type, IRInst* arrayLikeType, IRIntegerValue element)
+{
+    IRInst* args[] = {arrayLikeType, getIntValue(getIntType(), element)};
+    return emitIntrinsicInst(type, kIROp_GetElementPtr, 2, args);
 }
 
 IRInst* IRBuilder::emitGetTupleElement(IRType* type, IRInst* tuple, IRInst* element)
@@ -4345,6 +4421,11 @@ IRInst* IRBuilder::emitMakeMatrixFromScalar(IRType* type, IRInst* scalarValue)
     return emitIntrinsicInst(type, kIROp_MakeMatrixFromScalar, 1, &scalarValue);
 }
 
+IRInst* IRBuilder::emitMakeCoopVector(IRType* type, UInt argCount, IRInst* const* args)
+{
+    return emitIntrinsicInst(type, kIROp_MakeCoopVector, argCount, args);
+}
+
 IRInst* IRBuilder::emitMakeArray(IRType* type, UInt argCount, IRInst* const* args)
 {
     return emitIntrinsicInst(type, kIROp_MakeArray, argCount, args);
@@ -4462,6 +4543,18 @@ RefPtr<IRModule> IRModule::create(Session* session)
     moduleInst->module = module;
 
     return module;
+}
+
+void IRModule::buildMangledNameToGlobalInstMap()
+{
+    m_mapMangledNameToGlobalInst.clear();
+    for (auto inst : getGlobalInsts())
+    {
+        if (auto linkageDecor = inst->findDecoration<IRLinkageDecoration>())
+        {
+            m_mapMangledNameToGlobalInst[linkageDecor->getMangledName()].add(inst);
+        }
+    }
 }
 
 IRDominatorTree* IRModule::findOrCreateDominatorTree(IRGlobalValueWithCode* func)
@@ -5187,6 +5280,10 @@ IRInst* IRBuilder::emitElementAddress(IRInst* basePtr, IRInst* index)
     {
         type = vectorType->getElementType();
     }
+    else if (auto coopVecType = as<IRCoopVectorType>(valueType))
+    {
+        type = coopVecType->getElementType();
+    }
     else if (auto matrixType = as<IRMatrixType>(valueType))
     {
         type = getVectorType(matrixType->getElementType(), matrixType->getColumnCount());
@@ -5201,6 +5298,11 @@ IRInst* IRBuilder::emitElementAddress(IRInst* basePtr, IRInst* index)
         SLANG_ASSERT(as<IRIntLit>(index));
         type = (IRType*)tupleType->getOperand(getIntVal(index));
     }
+    else if (auto hlslInputPatchType = as<IRHLSLInputPatchType>(valueType))
+    {
+        type = hlslInputPatchType->getElementType();
+    }
+
     SLANG_RELEASE_ASSERT(type);
     auto inst = createInst<IRGetElementPtr>(
         this,
@@ -5569,6 +5671,13 @@ IRInst* IRBuilder::emitDiscard()
     return inst;
 }
 
+IRInst* IRBuilder::emitCheckpointObject(IRInst* value)
+{
+    auto inst =
+        createInst<IRCheckpointObject>(this, kIROp_CheckpointObject, value->getFullType(), value);
+    addInst(inst);
+    return inst;
+}
 
 IRInst* IRBuilder::emitBranch(IRBlock* pBlock)
 {
@@ -5958,6 +6067,20 @@ IRInst* IRBuilder::emitShr(IRType* type, IRInst* left, IRInst* right)
 IRInst* IRBuilder::emitShl(IRType* type, IRInst* left, IRInst* right)
 {
     auto inst = createInst<IRInst>(this, kIROp_Lsh, type, left, right);
+    addInst(inst);
+    return inst;
+}
+
+IRInst* IRBuilder::emitAnd(IRType* type, IRInst* left, IRInst* right)
+{
+    auto inst = createInst<IRInst>(this, kIROp_And, type, left, right);
+    addInst(inst);
+    return inst;
+}
+
+IRInst* IRBuilder::emitOr(IRType* type, IRInst* left, IRInst* right)
+{
+    auto inst = createInst<IRInst>(this, kIROp_Or, type, left, right);
     addInst(inst);
     return inst;
 }
@@ -7394,8 +7517,6 @@ static bool _isTypeOperandEqual(IRInst* a, IRInst* b)
     {
         return _areTypeOperandsEqual(a, b);
     }
-    SLANG_ASSERT(!"Unhandled comparison");
-
     // We can't equate any other type..
     return false;
 }
@@ -8145,6 +8266,7 @@ bool IRInst::mightHaveSideEffects(SideEffectAnalysisOptions options)
     case kIROp_GetAddr:
     case kIROp_GetValueFromBoundInterface:
     case kIROp_MakeUInt64:
+    case kIROp_MakeCoopVector:
     case kIROp_MakeVector:
     case kIROp_MakeMatrix:
     case kIROp_MakeMatrixFromScalar:
@@ -8217,6 +8339,7 @@ bool IRInst::mightHaveSideEffects(SideEffectAnalysisOptions options)
     case kIROp_ExtractExistentialValue:
     case kIROp_ExtractExistentialWitnessTable:
     case kIROp_WrapExistential:
+    case kIROp_BuiltinCast:
     case kIROp_BitCast:
     case kIROp_CastFloatToInt:
     case kIROp_CastIntToFloat:
@@ -8249,6 +8372,7 @@ bool IRInst::mightHaveSideEffects(SideEffectAnalysisOptions options)
     case kIROp_ResolveVaryingInputRef:
     case kIROp_GetPerVertexInputArray:
     case kIROp_MetalCastToDepthTexture:
+    case kIROp_GetCurrentStage:
         return false;
 
     case kIROp_ForwardDifferentiate:
@@ -8629,6 +8753,7 @@ bool isMovableInst(IRInst* inst)
 
     switch (inst->getOp())
     {
+    case kIROp_MakeCoopVector:
     case kIROp_Add:
     case kIROp_Sub:
     case kIROp_Mul:

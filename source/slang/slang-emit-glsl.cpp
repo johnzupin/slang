@@ -15,13 +15,13 @@
 namespace Slang
 {
 
-void trackGLSLTargetCaps(GLSLExtensionTracker* extensionTracker, CapabilitySet const& caps);
+void trackGLSLTargetCaps(ShaderExtensionTracker* extensionTracker, CapabilitySet const& caps);
 
 GLSLSourceEmitter::GLSLSourceEmitter(const Desc& desc)
     : Super(desc)
 {
     m_glslExtensionTracker =
-        dynamicCast<GLSLExtensionTracker>(desc.codeGenContext->getExtensionTracker());
+        dynamicCast<ShaderExtensionTracker>(desc.codeGenContext->getExtensionTracker());
     SLANG_ASSERT(m_glslExtensionTracker);
 }
 
@@ -1791,6 +1791,12 @@ bool GLSLSourceEmitter::tryEmitGlobalParamImpl(IRGlobalParam* varDecl, IRType* v
         }
     }
 
+    if (varDecl->findDecoration<IRTargetBuiltinVarDecoration>())
+    {
+        // By default, we don't need to emit a definition for target builtin variables.
+        return true;
+    }
+
     // Do the default thing
     return false;
 }
@@ -2997,7 +3003,7 @@ void GLSLSourceEmitter::emitFrontMatterImpl(TargetRequest* targetReq)
         trackGLSLTargetCaps(m_glslExtensionTracker, targetReq->getTargetCaps());
 
         StringBuilder builder;
-        m_glslExtensionTracker->appendExtensionRequireLines(builder);
+        m_glslExtensionTracker->appendExtensionRequireLinesForGLSL(builder);
         m_writer->emit(builder.getUnownedSlice());
     }
 
@@ -3368,6 +3374,23 @@ void GLSLSourceEmitter::emitSimpleTypeImpl(IRType* type)
             break;
         }
 
+        return;
+    }
+    else if (auto specializedType = as<IRSpecialize>(type))
+    {
+        // If a `specialize` instruction made it this far, then
+        // it represents an intrinsic generic type.
+        //
+        emitSimpleType((IRType*)getSpecializedValue(specializedType));
+        m_writer->emit("<");
+        UInt argCount = specializedType->getArgCount();
+        for (UInt ii = 0; ii < argCount; ++ii)
+        {
+            if (ii != 0)
+                m_writer->emit(", ");
+            emitVal(specializedType->getArg(ii), getInfo(EmitOp::General));
+        }
+        m_writer->emit(" >");
         return;
     }
 

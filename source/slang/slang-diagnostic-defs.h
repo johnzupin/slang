@@ -49,6 +49,7 @@ DIAGNOSTIC(-1, Note, seeUsingOf, "see using of '$0'")
 DIAGNOSTIC(-1, Note, seeDefinitionOfShader, "see definition of shader '$0'")
 DIAGNOSTIC(-1, Note, seeInclusionOf, "see inclusion of '$0'")
 DIAGNOSTIC(-1, Note, seeModuleBeingUsedIn, "see module '$0' being used in '$1'")
+DIAGNOSTIC(-1, Note, seeCallOfFunc, "see call to '$0'")
 DIAGNOSTIC(-1, Note, seePipelineRequirementDefinition, "see pipeline requirement definition")
 DIAGNOSTIC(
     -1,
@@ -456,6 +457,11 @@ DIAGNOSTIC(
     Error,
     unexpectedTokenExpectedComponentDefinition,
     "unexpected token '$0', only component definitions are allowed in a shader scope.")
+DIAGNOSTIC(
+    20005,
+    Error,
+    invalidEmptyParenthesisExpr,
+    "empty parenthesis '()' is not a valid expression.")
 DIAGNOSTIC(20008, Error, invalidOperator, "invalid operator '$0'.")
 DIAGNOSTIC(20011, Error, unexpectedColon, "unexpected ':'.")
 DIAGNOSTIC(
@@ -556,6 +562,13 @@ DIAGNOSTIC(
     Error,
     spirvUndefinedId,
     "SPIRV id '%$0' is not defined in the current assembly block location")
+
+DIAGNOSTIC(
+    29115,
+    Error,
+    targetSwitchCaseCannotBeAStage,
+    "cannot use a stage name in '__target_switch', use '__stage_switch' for stage-specific code.")
+
 //
 // 3xxxx - Semantic analysis
 //
@@ -593,6 +606,11 @@ DIAGNOSTIC(30019, Error, typeMismatch, "expected an expression of type '$0', got
 DIAGNOSTIC(30021, Error, noApplicationFunction, "$0: no overload takes arguments ($1)")
 DIAGNOSTIC(30022, Error, invalidTypeCast, "invalid type cast between \"$0\" and \"$1\".")
 DIAGNOSTIC(30023, Error, typeHasNoPublicMemberOfName, "\"$0\" does not have public member \"$1\".")
+DIAGNOSTIC(
+    30024,
+    Error,
+    cannotConvertArrayOfSmallerToLargerSize,
+    "Cannot convert array of size $0 to array of size $1 as this would truncate data")
 DIAGNOSTIC(30025, Error, invalidArraySize, "array size must be larger than zero.")
 DIAGNOSTIC(
     30026,
@@ -969,7 +987,7 @@ DIAGNOSTIC(
     36107,
     Error,
     entryPointUsesUnavailableCapability,
-    "entrypoint '$0' does not support compilation target '$1' with stage '$2'")
+    "entrypoint '$0' uses features that are not available in '$2' stage for '$1' target.")
 DIAGNOSTIC(
     36108,
     Error,
@@ -1007,7 +1025,11 @@ DIAGNOSTIC(
     Error,
     capabilityHasMultipleStages,
     "Capability '$0' is targeting stages '$1', only allowed to use 1 unique stage here.")
-
+DIAGNOSTIC(
+    36117,
+    Error,
+    declHasDependenciesNotCompatibleOnStage,
+    "'$0' uses features that are not available in '$1' stage.")
 
 // Attributes
 DIAGNOSTIC(31000, Warning, unknownAttributeName, "unknown attribute '$0'")
@@ -1039,6 +1061,12 @@ DIAGNOSTIC(
     Error,
     attributeExpectedStringArg,
     "attribute '$0' expects argument $1 to be string")
+
+DIAGNOSTIC(
+    31009,
+    Error,
+    expectedSingleFloatArg,
+    "attribute '$0' expects a single floating point argument")
 
 DIAGNOSTIC(31100, Error, unknownStageName, "unknown stage name '$0'")
 DIAGNOSTIC(31101, Error, unknownImageFormatName, "unknown image format '$0'")
@@ -1190,6 +1218,12 @@ DIAGNOSTIC(
     Error,
     overloadedFuncUsedWithDerivativeOfAttributes,
     "cannot resolve overloaded functions for derivative-of attributes.")
+DIAGNOSTIC(
+    31158,
+    Error,
+    primalSubstituteTargetMustHaveHigherDifferentiabilityLevel,
+    "primal substitute function for differentiable method must also be differentiable. Use "
+    "[Differentiable] or [TreatAsDifferentiable] (for empty derivatives)")
 
 DIAGNOSTIC(31200, Warning, deprecatedUsage, "$0 has been deprecated: $1")
 DIAGNOSTIC(31201, Error, modifierNotAllowed, "modifier '$0' is not allowed here.")
@@ -1415,6 +1449,11 @@ DIAGNOSTIC(
     Error,
     cannotUseInitializerListForType,
     "cannot use initializer list for type '$0'")
+DIAGNOSTIC(
+    30505,
+    Error,
+    cannotUseInitializerListForCoopVectorOfUnknownSize,
+    "cannot use initializer list for CoopVector of statically unknown size '$0'")
 
 // 3062x: variables
 DIAGNOSTIC(
@@ -2019,6 +2058,21 @@ DIAGNOSTIC(
     notValidVaryingParameter,
     "parameter '$0' is not a valid varying parameter.")
 
+DIAGNOSTIC(
+    39029,
+    Warning,
+    registerModifierButNoVkBindingNorShift,
+    "shader parameter '$0' has a 'register' specified for D3D, but no '[[vk::binding(...)]]` "
+    "specified for Vulkan, nor is `-fvk-$1-shift` used.")
+
+DIAGNOSTIC(
+    39071,
+    Warning,
+    bindingAttributeIgnoredOnUniform,
+    "binding attribute on uniform '$0' will be ignored since it will be packed into the default "
+    "constant buffer at descriptor set 0 binding 0. To use explicit bindings, declare the uniform "
+    "inside a constant buffer.")
+
 //
 
 // 4xxxx - IL code generation.
@@ -2265,7 +2319,7 @@ DIAGNOSTIC(
     41402,
     Error,
     staticAssertionConditionNotConstant,
-    "condition for static assertion cannot be evaluated at the compile-time.")
+    "condition for static assertion cannot be evaluated at compile time.")
 
 DIAGNOSTIC(
     41402,
@@ -2515,6 +2569,8 @@ DIAGNOSTIC(
     attemptToQuerySizeOfUnsizedArray,
     "cannot obtain the size of an unsized array.")
 
+DIAGNOSTIC(56003, Fatal, useOfUninitializedOpaqueHandle, "use of uninitialized opaque handle '$0'.")
+
 // Metal
 DIAGNOSTIC(
     56100,
@@ -2522,6 +2578,12 @@ DIAGNOSTIC(
     constantBufferInParameterBlockNotAllowedOnMetal,
     "nested 'ConstantBuffer' inside a 'ParameterBlock' is not supported on Metal, use "
     "'ParameterBlock' instead.")
+DIAGNOSTIC(
+    56101,
+    Error,
+    resourceTypesInConstantBufferInParameterBlockNotAllowedOnMetal,
+    "nesting a 'ConstantBuffer' containing resource types inside a 'ParameterBlock' is not "
+    "supported on Metal, please use 'ParameterBlock' instead.")
 
 DIAGNOSTIC(57001, Warning, spirvOptFailed, "spirv-opt failed. $0")
 DIAGNOSTIC(57002, Error, unknownPatchConstantParameter, "unknown patch constant parameter '$0'.")

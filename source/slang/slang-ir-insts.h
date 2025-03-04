@@ -193,6 +193,14 @@ enum class IRInterpolationMode
     PerVertex,
 };
 
+enum class IRTargetBuiltinVarName
+{
+    Unknown,
+    HlslInstanceID,
+    SpvInstanceIndex,
+    SpvBaseInstance,
+};
+
 struct IRInterpolationModeDecoration : IRDecoration
 {
     enum
@@ -422,6 +430,15 @@ struct IRRequireGLSLExtensionDecoration : IRDecoration
     UnownedStringSlice getExtensionName() { return getExtensionNameOperand()->getStringSlice(); }
 };
 
+struct IRRequireWGSLExtensionDecoration : IRDecoration
+{
+    IR_LEAF_ISA(RequireWGSLExtensionDecoration)
+
+    IRStringLit* getExtensionNameOperand() { return cast<IRStringLit>(getOperand(0)); }
+
+    UnownedStringSlice getExtensionName() { return getExtensionNameOperand()->getStringSlice(); }
+};
+
 struct IRMemoryQualifierSetDecoration : IRDecoration
 {
     enum
@@ -504,6 +521,17 @@ struct IRNVAPISlotDecoration : IRDecoration
 
     IRStringLit* getSpaceNameOperand() { return cast<IRStringLit>(getOperand(1)); }
     UnownedStringSlice getSpaceName() { return getSpaceNameOperand()->getStringSlice(); }
+};
+
+struct IRMaxTessFactorDecoration : IRDecoration
+{
+    enum
+    {
+        kOp = kIROp_MaxTessFactorDecoration
+    };
+    IR_LEAF_ISA(MaxTessFactorDecoration)
+
+    IRFloatLit* getMaxTessFactor() { return cast<IRFloatLit>(getOperand(0)); }
 };
 
 struct IROutputControlPointsDecoration : IRDecoration
@@ -683,6 +711,18 @@ struct IRLinkageDecoration : IRDecoration
     IRStringLit* getMangledNameOperand() { return cast<IRStringLit>(getOperand(0)); }
 
     UnownedStringSlice getMangledName() { return getMangledNameOperand()->getStringSlice(); }
+};
+
+// Mark a global variable as a target buitlin variable.
+struct IRTargetBuiltinVarDecoration : IRDecoration
+{
+    IR_LEAF_ISA(TargetBuiltinVarDecoration)
+
+    IRIntLit* getBuiltinVarOperand() { return cast<IRIntLit>(getOperand(0)); }
+    IRTargetBuiltinVarName getBuiltinVarName()
+    {
+        return IRTargetBuiltinVarName(getBuiltinVarOperand()->getValue());
+    }
 };
 
 struct IRUserExternDecoration : IRDecoration
@@ -1123,7 +1163,7 @@ struct IRMixedDifferentialInstDecoration : IRAutodiffInstDecoration
     IRUse pairType;
     IR_LEAF_ISA(MixedDifferentialInstDecoration)
 
-    IRType* getPairType() { return as<IRType>(getOperand(0)); }
+    IRType* getPairType() { return (IRType*)(getOperand(0)); }
 };
 
 struct IRRecomputeBlockDecoration : IRAutodiffInstDecoration
@@ -1583,6 +1623,11 @@ struct IRStageWriteAccessDecoration : public IRStageAccessDecoration
 struct IRPayloadDecoration : public IRDecoration
 {
     IR_LEAF_ISA(PayloadDecoration)
+};
+
+struct IRRayPayloadDecoration : public IRDecoration
+{
+    IR_LEAF_ISA(RayPayloadDecoration)
 };
 
 // Mesh shader decorations
@@ -2404,7 +2449,7 @@ struct IRCall : IRInst
     IR_LEAF_ISA(Call)
 
     IRInst* getCallee() { return getOperand(0); }
-
+    IRUse* getCalleeUse() { return getOperands(); }
     UInt getArgCount() { return getOperandCount() - 1; }
     IRUse* getArgs() { return getOperands() + 1; }
     IROperandList<IRInst> getArgsList()
@@ -2637,6 +2682,22 @@ struct IRYield : IRTerminatorInst
 
 struct IRDiscard : IRTerminatorInst
 {
+};
+
+// Used for representing a distinct copy of an object.
+// This will get lowered into a no-op in the backend,
+// but is useful for IR transformations that need to consider
+// different uses of an inst separately.
+//
+// For example, when we hoist primal insts out of a loop,
+// we need to make distinct copies of the inst for its uses
+// within the loop body and outside of it.
+//
+struct IRCheckpointObject : IRInst
+{
+    IR_LEAF_ISA(CheckpointObject);
+
+    IRInst* getVal() { return getOperand(0); }
 };
 
 // Signals that this point in the code should be unreachable.
@@ -3016,6 +3077,11 @@ struct IRMakeVector : IRInst
 struct IRMakeVectorFromScalar : IRInst
 {
     IR_LEAF_ISA(MakeVectorFromScalar)
+};
+
+struct IRMakeCoopVector : IRInst
+{
+    IR_LEAF_ISA(MakeCoopVector)
 };
 
 // An Instruction that creates a differential pair value from a
@@ -3642,6 +3708,7 @@ public:
     IRBasicType* getUInt64Type();
     IRBasicType* getUInt16Type();
     IRBasicType* getUInt8Type();
+    IRBasicType* getFloatType();
     IRBasicType* getCharType();
     IRStringType* getStringType();
     IRNativeStringType* getNativeStringType();
@@ -3734,6 +3801,8 @@ public:
     IRVectorType* getVectorType(IRType* elementType, IRInst* elementCount);
 
     IRVectorType* getVectorType(IRType* elementType, IRIntegerValue elementCount);
+
+    IRCoopVectorType* getCoopVectorType(IRType* elementType, IRInst* elementCount);
 
     IRMatrixType* getMatrixType(
         IRType* elementType,
@@ -3852,6 +3921,8 @@ public:
     // Set the data type of an instruction, while preserving
     // its rate, if any.
     void setDataType(IRInst* inst, IRType* dataType);
+
+    IRInst* emitGetCurrentStage();
 
     /// Extract the value wrapped inside an existential box.
     IRInst* emitGetValueFromBoundInterface(IRType* type, IRInst* boundInterfaceValue);
@@ -3990,7 +4061,7 @@ public:
     /// the inst.
     IRInst* emitDefaultConstructRaw(IRType* type);
 
-    IRInst* emitCast(IRType* type, IRInst* value);
+    IRInst* emitCast(IRType* type, IRInst* value, bool fallbackToBuiltinCast = true);
 
     IRInst* emitVectorReshape(IRType* type, IRInst* value);
 
@@ -4056,6 +4127,9 @@ public:
     IRInst* emitGetTupleElement(IRType* type, IRInst* tuple, UInt element);
     IRInst* emitGetTupleElement(IRType* type, IRInst* tuple, IRInst* element);
 
+    IRInst* emitGetElement(IRType* type, IRInst* arrayLikeType, IRIntegerValue element);
+    IRInst* emitGetElementPtr(IRType* type, IRInst* arrayLikeType, IRIntegerValue element);
+
     IRInst* emitMakeResultError(IRType* resultType, IRInst* errorVal);
     IRInst* emitMakeResultValue(IRType* resultType, IRInst* val);
     IRInst* emitIsResultError(IRInst* result);
@@ -4093,6 +4167,8 @@ public:
     IRInst* emitMakeMatrix(IRType* type, UInt argCount, IRInst* const* args);
 
     IRInst* emitMakeMatrixFromScalar(IRType* type, IRInst* scalarValue);
+
+    IRInst* emitMakeCoopVector(IRType* type, UInt argCount, IRInst* const* args);
 
     IRInst* emitMakeArray(IRType* type, UInt argCount, IRInst* const* args);
 
@@ -4368,6 +4444,8 @@ public:
 
     IRInst* emitDiscard();
 
+    IRInst* emitCheckpointObject(IRInst* value);
+
     IRInst* emitUnreachable();
     IRInst* emitMissingReturn();
 
@@ -4485,6 +4563,9 @@ public:
     IRInst* emitShr(IRType* type, IRInst* op0, IRInst* op1);
     IRInst* emitShl(IRType* type, IRInst* op0, IRInst* op1);
 
+    IRInst* emitAnd(IRType* type, IRInst* left, IRInst* right);
+    IRInst* emitOr(IRType* type, IRInst* left, IRInst* right);
+
     IRSPIRVAsmOperand* emitSPIRVAsmOperandLiteral(IRInst* literal);
     IRSPIRVAsmOperand* emitSPIRVAsmOperandInst(IRInst* inst);
     IRSPIRVAsmOperand* createSPIRVAsmOperandInst(IRInst* inst);
@@ -4596,6 +4677,18 @@ public:
 
     //    void addLayoutDecoration(IRInst* value, Layout* layout);
     IRLayoutDecoration* addLayoutDecoration(IRInst* value, IRLayout* layout);
+
+    IRDecoration* addTargetBuiltinVarDecoration(
+        IRInst* value,
+        IRTargetBuiltinVarName builtinVarName)
+    {
+        IRInst* operands[] = {getIntValue((IRIntegerValue)builtinVarName)};
+        return addDecoration(
+            value,
+            kIROp_TargetBuiltinVarDecoration,
+            operands,
+            SLANG_COUNT_OF(operands));
+    }
 
     //    IRLayout* getLayout(Layout* astLayout);
 
@@ -4778,6 +4871,11 @@ public:
             value,
             kIROp_RequireGLSLVersionDecoration,
             getIntValue(getIntType(), IRIntegerValue(version)));
+    }
+
+    void addRequireWGSLExtensionDecoration(IRInst* value, UnownedStringSlice const& extensionName)
+    {
+        addDecoration(value, kIROp_RequireWGSLExtensionDecoration, getStringValue(extensionName));
     }
 
     void addRequirePreludeDecoration(
@@ -5246,6 +5344,8 @@ public:
     {
         addDecoration(inst, kIROp_EntryPointParamDecoration, entryPointFunc);
     }
+
+    void addRayPayloadDecoration(IRType* inst) { addDecoration(inst, kIROp_RayPayloadDecoration); }
 };
 
 // Helper to establish the source location that will be used
