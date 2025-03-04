@@ -1,3 +1,725 @@
+slang (2025.6.1~rc1-1lunarg24.04-1) noble; urgency=medium
+
+  [ Ellie Hermaszewska ]
+  * Fix prebuilt dependencies filenames on non-windows platforms (#5848)
+  * Correct casing of windows includes (#5849)
+  * Bump imgui for include fix (#5854)
+  * Add missing header for _getpid() (#5852)
+  * Set default hidden visibility for all source on gcc (#5850)
+  * Correctly distinguish between windows and MSVC (#5851)
+  * Add SLANG_ENABLE_DXIL (#5853)
+
+  [ Anders Leino ]
+  * WGSL: Fix issue where global calls are generated (#5768)
+
+  [ Theresa Foley ]
+  * Add an example for using the reflection API (#5839)
+
+  [ Ellie Hermaszewska ]
+  * use Release over RelWithDebInfo for ci (#5846)
+
+  [ kaizhangNV ]
+  * Bit extract (#5847)
+
+  [ Ellie Hermaszewska ]
+  * Make slang-rhi's NVAPI support conditional on SLANG_ENABLE_NVAPI (#5855)
+
+  [ Theresa Foley ]
+  * Update reflection API chapter in User Guide (#5868)
+
+  [ Darren ]
+  * Enable exprs for all supported GLSL layout qualifiers (#5857)
+
+  [ Ellie Hermaszewska ]
+  * install mono for toc generation (#5877)
+
+  [ Yong He ]
+  * Support matrix negation in metal backend. (#5891)
+  * Fix `getArgumentValueFloat` when arg is int. (#5888)
+  * Update 09-reflection.md (#5886)
+  * Fix entrypoint auto discovery logic. (#5885)
+
+  [ kaizhangNV ]
+  * Implement bitcast for 64-bit date type (#5895)
+
+  [ Yong He ]
+  * Support specializing generic entrypoints in `findAndCheckEntryPoint`. (#5890)
+  * Add verification logic on push and specialization constants. (#5887)
+
+  [ Anders Leino ]
+  * Add slang example tests to CI (#5879)
+
+  [ Yong He ]
+  * Allow `Optional`, `Tuple` and `bool` to be used in varying input/output. (#5889)
+  * Fix metadata of register space and varying params. (#5906)
+  * Support explicit `[vk::location(n)]` binding on metal/wgsl. (#5907)
+  * Check decl nesting for namespaces. (#5910)
+
+  [ kaizhangNV ]
+  * Fix the parser issue for not recognize Generic<T>[N] (#5912)
+
+  [ Anders Leino ]
+  * Refresh list of failing examples (#5904)
+  * Fix issues reported by 'shellcheck' (#5913)
+
+  [ Yong He ]
+  * Report error when generated spirv is empty. (#5899)
+
+  [ Ellie Hermaszewska ]
+  * Readme corrections (#5874)
+
+  [ Darren Wihandi ]
+  * Add HLSL texture sample with status intrinsics (#5901)
+
+  [ Anders Leino ]
+  * Enable more examples in CI (#5915)
+
+  [ Darren Wihandi ]
+  * Add base vertex and base instance system values (#5918)
+
+  [ Yong He ]
+  * Fix crash during loop unrolling. (#5920)
+  * Check subscript/property accessor for differentiability. (#5922)
+
+  [ Anders Leino ]
+  * Fix WASM build (#5925)
+
+  [ Stan ]
+  * Fixed stage and result field names in json reflection (#5927)
+
+  [ kaizhangNV ]
+  * update CTS package (#5935)
+
+  [ arya ]
+  * Reflection API Wasm Bindings Part1 (#5936)
+
+  [ AdamYuan ]
+  * Support dispatchComputeIndirect and draw(Indexed)Indirect with count buffer for Vulkan (#5929)
+
+  [ Darren Wihandi ]
+  * Add packed 8bit builtin types (#5939)
+
+  [ Julius Ikkala ]
+  * Fix parsing GLSL SSBO arrays / bindless descriptors (#5932)
+
+  [ Yuki Nishidate ]
+  * Fix tiny typos (#5944)
+
+  [ Darren Wihandi ]
+  * Implement HLSL pack/unpack math intrinsics (#5934)
+
+  [ Julius Ikkala ]
+  * Prevent constant folding for specialization constants (#5953)
+  * Skip uninitialized-use warning on hitAttributeEXT-decorated globals (#5952)
+
+  [ Anders Leino ]
+  * Add a basic WebGPU example (#5923)
+
+  [ Yong He ]
+  * Fix requirement candidate lookup to prefer decls in the same paraent as the inheritance decl. (#5965)
+  * Check mismatching method parameter direction against interface declaration. (#5964)
+  * Add `RaytracingAccelerationStructure::__init(uint64_t)`. (#5967)
+  * LanguageServer: fix highlighting of wrapper type. (#5968)
+  * Check for undefined %id in spirv_asm block. (#5966)
+  * Fix `getInheritanceInfo` for `ExtractExistentialType`. (#5971)
+
+  [ Julius Ikkala ]
+  * Add terminateRayEXT & ignoreIntersectionEXT (#5974)
+
+  [ Yong He ]
+  * Fix reflection for metal vector [[id]] location. (#5943)
+
+  [ Darren Wihandi ]
+  * add missing IR_LEAF_ISA for MetalMeshType (#5975)
+
+  [ Pétur Darri Pétursson ]
+  * Fixed incorrect condition in Session::queryInterface. (#5978)
+
+  [ bspeice ]
+  * Allow explicit test root (#5980)
+
+  [ kaizhangNV ]
+  * Correct IR generation for no-diff pointer type (#5976)
+
+  [ Yong He ]
+  * Fix parameter location reflection for pure data paramblocks. (#5956)
+  * Create DirectDeclRef when creating Decl to prevent invalid dedup. (#5945)
+
+  [ Julius Ikkala ]
+  * Make 'shared' keyword map to 'groupshared' in GLSL mode (#6003)
+
+  [ Anders Leino ]
+  * CI: Build the full slang-wasm.[js|wasm] targets instead of just the slang library. (#5998)
+
+  [ Julius Ikkala ]
+  * Fix GLSL mix(T,T,bool) SPIR-V output (#6006)
+  * Add support for textureLod with sampler2DArrayShadow (#6009)
+
+  [ Yong He ]
+  * Add `Bindless<T>` proposal. (#6002)
+
+  [ Jay Kwak ]
+  * Properly set D3D12SDKPath (#5993)
+  * Use disassemble API from SPIRV-Tools (#6001)
+
+  [ Anders Leino ]
+  * Fix some robustness issues in the examples (#5984)
+  * Add example showing how to use Slang/WASM (#5996)
+
+  [ kaizhangNV ]
+  *   Check whether array element is fully specialized (#6000)
+
+  [ Yong He ]
+  * Lower varying parameters as pointers instead of SSA values. (#5919)
+
+  [ Anders Leino ]
+  * Add backtraces to examples (#5973)
+  * slang-test: Ensure runtime is consistent (#6021)
+
+  [ Darren Wihandi ]
+  * Add SampleCmpLevel intrinsics (#6004)
+
+  [ Anders Leino ]
+  * Add parentheses to make precedence explicit (#6030)
+
+  [ Julius Ikkala ]
+  * Pass compiler specific args to GCC and Visual Studio too (#6019)
+
+  [ Simon Kallweit ]
+  * update slang-rhi (#6045)
+
+  [ Sai Praveen Bangaru ]
+  * [Auto-diff] Overhaul auto-diff type tracking + Overhaul dynamic dispatch for differentiable functions (#5866)
+
+  [ Jay Kwak ]
+  * Upgrade actions/upload-artifact from v3 to v4 (#6051)
+
+  [ Julius Ikkala ]
+  * Fix implicit string conversion breaking NativeStrings (#6035)
+
+  [ Nathan V. Morrical ]
+  * `[[shader_record]] / [[push_constant]]` Param Annotations Proposal (#6053)
+
+  [ Jay Kwak ]
+  * Support a storage class, NodePayloadAMDX, for SPIRV work-graphs (#6052)
+
+  [ Darren Wihandi ]
+  * Add CalculateLevelOfDetail* overloads for comparison samplers (#6018)
+
+  [ Anders Leino ]
+  * Add exhaustive associativity test for WGSL (#6056)
+
+  [ Yong He ]
+  * Initial implementation of SP#015 `DescriptorHandle<T>`. (#6028)
+  * Fix Metal type layout reflection for nested parameter blocks. (#6042)
+
+  [ Jay Kwak ]
+  * Fix potential test failures due to SPIRV validation failure (#6047)
+
+  [ Anders Leino ]
+  * WGSL: Convert signed vector shift amounts to unsigned (#6023)
+
+  [ mTvare ]
+  * Add overload for select to handle Optional<T> (#6022)
+
+  [ Yong He ]
+  * Fix `markNonContextParamsAsSideEffectFree`. (#6054)
+  * Fix CUDA reflection for acceleration structure handle size. (#6055)
+
+  [ Simon Kallweit ]
+  * Find OptiX headers (#6071)
+
+  [ Sai Praveen Bangaru ]
+  * Don't initialize temp var for out parameters. (#6076)
+
+  [ cheneym2 ]
+  * Fix simplify if-else (#6077)
+
+  [ Entropy Lost ]
+  * Fix inaccurate documentation in member function mutability. (#6065)
+
+  [ Simon Kallweit ]
+  * update slang-rhi + fix nvrtc options (#6080)
+
+  [ wij ]
+  * Fix #5354, change diagnostic definition error message and expect output in test (#6067)
+
+  [ Julius Ikkala ]
+  * Implement specialization constant support in numthreads / local_size (#5963)
+
+  [ Yong He ]
+  * Fix documentation on DescriptorHandle. (#6062)
+
+  [ Sai Praveen Bangaru ]
+  * Fix issue with specialization using arithmetic expressions (#6084)
+
+  [ Yong He ]
+  * Fix optix varying legalization. (#6089)
+
+  [ Darren Wihandi ]
+  * Reuse code for Metal and WGSL entry point legalization (#6063)
+
+  [ Julius Ikkala ]
+  * Implement AnyValue marshalling for 8-bit integers (#6059)
+
+  [ Anders Leino ]
+  * Emit errors when seeing a matrix with row/col count of 1 (#6044)
+
+  [ Yong He ]
+  * Inline global constants that contains opaque handles for legalization. (#6098)
+  * Fix argument buffer tier2 layout computation. (#6101)
+
+  [ Darren Wihandi ]
+  * support SV_ViewIndex for Metal (#6103)
+  * Implement Packed Dot Product intrinsics (#6068)
+
+  [ Anders Leino ]
+  * C-like emitter: Add parenthesis when combining relational and bitwise… (#6070)
+
+  [ Julius Ikkala ]
+  * Fix cyclic lookups with UnscopedEnums (#6110)
+
+  [ Sai Praveen Bangaru ]
+  * Fix resource specialization issue where store insts from inlined calls are not considered properly. (#6099)
+
+  [ Anders Leino ]
+  * Move global variable initialization into entry points for WGSL (#6106)
+
+  [ Yong He ]
+  * Fix prebound parameter pack - argument list matching logic. (#6111)
+  * Fix `-capability` arg in SPIRV debug command line output. (#6114)
+
+  [ Darren Wihandi ]
+  * hoist entry point params for wgsl (#6116)
+
+  [ Julius Ikkala ]
+  * Fix nullptr in generic specialization (#6066)
+
+  [ Jay Kwak ]
+  * Avoid using the backend validation when using test server (#6094)
+
+  [ Sai Praveen Bangaru ]
+  * Fix interface requirement lowering for generic accessors (#6123)
+
+  [ Yong He ]
+  * Refactor _Texture to constrain on texel types. (#6115)
+  * Allow __subscript<T> syntax. (#6124)
+  * Add groupshared atomic array test. (#6107)
+  * Add diagnostic for function body followed by a `;`;. (#6122)
+
+  [ Sai Praveen Bangaru ]
+  * Fix circularity issue when checking multiple generic interface constraints. (#6121)
+
+  [ Khronos Group Web Services ]
+  * Create CNAME
+  * Delete CNAME
+
+  [ Jay Kwak ]
+  * test-server should use d3d12core.dll from bin directory (#6095)
+
+  [ Darren Wihandi ]
+  * Implement Quad Control intrinsics (#5981)
+
+  [ Julius Ikkala ]
+  * Make -depfile work for binary modules output too (#6126)
+  * Fix upper 32 bits of 64-bit AnyValue packing (#6127)
+
+  [ Sai Praveen Bangaru ]
+  * Fix def-use issue from multi-level break elimination (#6134)
+
+  [ Julius Ikkala ]
+  * Generate IDs for every witness table (#6129)
+
+  [ spking11 ]
+  * Fix gcc downstream compiler optimization level corresponding to OptimizationLevel::Maximal (#6137)
+
+  [ kaizhangNV ]
+  * Fix bug: IgnoreInheritance in lookup (#6146)
+
+  [ Anders Leino ]
+  * Catch all exceptions from loadModule* and link API calls. (#6143)
+
+  [ cheneym2 ]
+  * Bump spirv-tools to 9295a8b94ed0751565fa9cda6d949f5e388b32d9 (#6145)
+
+  [ Darren Wihandi ]
+  * Remove unnecessary parameters from Metal entry point signature (#6131)
+  * Use SPIRV integer vector dot product instructions (#6141)
+
+  [ Anders Leino ]
+  * Add validation for destination of atomic operations (#6093)
+
+  [ Yong He ]
+  * Cache and reuse glsl module. (#6152)
+
+  [ Jay Kwak ]
+  * Fix incorrect resolve of specialization instance (#6162)
+
+  [ Dario Mylonopoulos ]
+  * Fix static build and install (#6158)
+
+  [ Darren Wihandi ]
+  * improve error message on generic value decls (#6169)
+  * Add bgra8 format (#6163)
+
+  [ Julius Ikkala ]
+  * Add intptr_t abs/min/max operations for CPU & CUDA targets (#6160)
+
+  [ Anders Leino ]
+  * Some usability improvements to formatting script (#6153)
+
+  [ Yong He ]
+  * Fix depth texture sampling on Metal. (#6168)
+
+  [ kaizhangNV ]
+  * DNI: try using sparse checkout for MDL-SDK (#6190)
+
+  [ Jay Kwak ]
+  * Fix an incorrect iteration with a workList (#6177)
+
+  [ Yong He ]
+  * Properly plumbing layout for global varyings. (#6198)
+
+  [ Theresa Foley ]
+  * Add an example for reflection of parameter blocks (#6161)
+
+  [ Yong He ]
+  * Add a unit test to cover type-conformance compilation API. (#6178)
+  * Fix geometry shader related modifier lowering. (#6197)
+  * Delete invalid ASSERT in `isTypeOperandEqual`. (#6196)
+
+  [ Norbert Nopper ]
+  * Added const version for the operator[] in Matrix (#6186)
+
+  [ Ellie Hermaszewska ]
+  * Allow requiring glsl language extensions on structs (#6173)
+
+  [ Yong He ]
+  * Add slangpy proposal (#6156)
+
+  [ Jay Kwak ]
+  * Proposal for Cooperative Vector in Slang (#6209)
+
+  [ Darren Wihandi ]
+  * Fix UIntSet calcSubtract to handle mismatched buffer sizes (#6205)
+  * Fix exact-match witness synthesis for static functions (#6204)
+  * Implement WaveMultiPrefix* for SPIRV and GLSL (#6182)
+
+  [ Sai Praveen Bangaru ]
+  * Fix loophole in hoisting where an `OpVar`'s uses might not be properly registered for replacement (#6212)
+
+  [ kaizhangNV ]
+  * Fix the type coerce issue (#6215)
+
+  [ cheneym2 ]
+  * Fix combined sampler documentation and warning (#6207)
+
+  [ Jay Kwak ]
+  * Update SPIRV submodules and fix tests (#6222)
+
+  [ Yong He ]
+  * Fix ConstantIntVal::toText when the val is a enum. (#6224)
+
+  [ Jay Kwak ]
+  * Support cooperative vector (#6223)
+
+  [ Sai Praveen Bangaru ]
+  * Add coop-vec insts to non-differentiable insts list (#6227)
+
+  [ Jay Kwak ]
+  * Support cooperative vector including Vulkan-Header (#6228)
+
+  [ Yong He ]
+  * Declare `VariablePointers` capability when needed. (#6231)
+
+  [ Sai Praveen Bangaru ]
+  * [Docs] Auto-diff documentation overhaul (#6202)
+
+  [ Yong He ]
+  * Distribute slang-glsl-module.bin in release packages. (#6233)
+
+  [ Anders Leino ]
+  * Respect per-target debug options (#6193)
+
+  [ Yong He ]
+  * Include slang-glsl-module.dll in releases, for precompiled glsl module. (#6239)
+  * Fix build issue when SLANG_EMBED_CORE_MODULE is OFF. (#6243)
+
+  [ Anders Leino ]
+  * Update Slang-RHI and enable any debug layers up-front (#6226)
+
+  [ Darren Wihandi ]
+  * Add support for WGSL subgroup operations (#6213)
+
+  [ Yong He ]
+  * Fix native Windows ARM64 build. (#6244)
+  * Auto enable `-fvk-use-entrypoint-name` when there is more than one entrypoint. (#6260)
+  * Fix parsing of nested generic app. (#6259)
+
+  [ Ellie Hermaszewska ]
+  * Correct NVAPI include (#6263)
+
+  [ cheneym2 ]
+  * Fix warning about push constants, shaderRecordEXT (#6269)
+
+  [ Sai Praveen Bangaru ]
+  * Fix non-square matrix derivatives (#6282)
+
+  [ Jay Kwak ]
+  * Use 0.0.7 version of VK-GL-CTS-for-Slang on nightly CTS CI (#6278)
+
+  [ kaizhangNV ]
+  * Fix autodiff issue for vector<T, N> (#6275)
+  * Feature/initialize list side branch (#6058)
+  * Switch back to Falcor (#6295)
+
+  [ Yong He ]
+  * Use two-stage parsing to disambiguate generic app and comparison. (#6281)
+
+  [ Sai Praveen Bangaru ]
+  * Fix DCE for calls to functions that have associations (#6272)
+
+  [ Jay Kwak ]
+  * maxtessfactor attribute should take a floating point value (#6289)
+  * Enable D3D12 experimental feature to use coopvec (#6290)
+
+  [ Sai Praveen Bangaru ]
+  * Fix inline markdown rendering (#6294)
+
+  [ Julius Ikkala ]
+  * Fix matrix comparison operators on CPU (#6296)
+
+  [ Darren Wihandi ]
+  * Add floating-point pack/unpack proposal (#6191)
+
+  [ Yong He ]
+  * Allow tuples to work with initializer list. (#6301)
+
+  [ Anders Leino ]
+  * Don't overwrite existing module decl scopes when parsing new source files (#6292)
+
+  [ Yong He ]
+  * Support stage_switch. (#6311)
+
+  [ KoT ]
+  * Update a3-reference.md (#6309)
+
+  [ Anders Leino ]
+  * Uncomment a previously failing test case (#6303)
+
+  [ Yong He ]
+  * Mark slangpy as deprecated and remove from user-guide. (#6300)
+
+  [ Anders Leino ]
+  * Add test for visibility in translation unit with multiple source files (#6306)
+
+  [ Simon Kallweit ]
+  * slang-rhi cmake integration (#6261)
+  * disable nanothread dependency (#6312)
+
+  [ Jay Kwak ]
+  * Use and() and or() functions for logical-AND and OR (#6310)
+
+  [ Tony (Atanas) Zlatinski ]
+  * Propagate the MemoryQualifierSetDecoration (#6315)
+
+  [ David A Roberts ]
+  * Add WGSL to list of formats supporting multiple entry points (#6324)
+
+  [ Colin Marc ]
+  * Fix compilation on musl libc targets (#6334)
+
+  [ Darren Wihandi ]
+  * Add support for Metal subgroup/simd operations (#6247)
+
+  [ Anders Leino ]
+  * Remove the docs/proposals directory (#6313)
+
+  [ Yong He ]
+  * Emit missing atomic64 capability, fix int-typed builtin used in both vs and fs. (#6314)
+
+  [ Ellie Hermaszewska ]
+  * Add raypayload decoration to ray payload structs (#6164)
+
+  [ Sai Praveen Bangaru ]
+  * Add checking for differentiability of the primal substitute function. (#6277)
+
+  [ Yong He ]
+  * Update build-llvm.ps1 (#6336)
+
+  [ Ellie Hermaszewska ]
+  * Correct location of copy-headers target (#6327)
+  * Correct dependencies on core module source  (#6340)
+  * build core and glsl modules in the same slang-bootstrap invocation (#6341)
+
+  [ kaizhangNV ]
+  * Fix crash when handling uninitialized resource type (#6338)
+
+  [ Yong He ]
+  * Allow LHS of `where` to be any type. (#6333)
+
+  [ Anders Leino ]
+  * Migrate slang-test away from deprecated Slang API (#6343)
+
+  [ Yong He ]
+  * Reflection Fixes. (#6346)
+
+  [ Ellie Hermaszewska ]
+  * Disallow only resources in constant buffers in parameterblocks on metal (#6342)
+
+  [ Yong He ]
+  * Fix modifier parsing. (#6347)
+
+  [ Jay Kwak ]
+  * Add CMake build target vs2019-dev that enables IR break (#6354)
+
+  [ cheneym2 ]
+  * Add support for GLSL interface blocks (#6351)
+  * Don't remove in-use globals (#6359)
+
+  [ kaizhangNV ]
+  * Fix metal issue (#6361)
+
+  [ Jay Kwak ]
+  * Enable Hull shader test for SPIRV (#6348)
+
+  [ Mukund Keshava ]
+  * slang: Fix empty VARARGS issue(#6332) (#6372)
+  * Add new zero size array test. (#6379)
+  * Add warning for ignored binding attributes on uniforms (#6373)
+
+  [ Jay Kwak ]
+  * Add two DXC implementation for CoopVec (#6393)
+
+  [ Ellie Hermaszewska ]
+  * Fix and document static build (#6374)
+
+  [ Anders Leino ]
+  * Cleanups for render-api (#6360)
+
+  [ David A Roberts ]
+  * Add userAttribs to entryPoints in reflection JSON (#6366)
+
+  [ Mukund Keshava ]
+  * Fix zero size array handling in slangc (#6399)
+
+  [ cheneym2 ]
+  * Show adapter info in slang-test (#6388)
+
+  [ Sai Praveen Bangaru ]
+  * Fix issue with `clamp`'s derivatives at the boundary. (#6403)
+
+  [ Jay Kwak ]
+  * Force inline functions that takes InputPatch and OutputPatch (#6407)
+  * Support for dynamic array of textures access for Texture footprint. (#6392)
+
+  [ Mukund Keshava ]
+  * HLSL: Add 'f' suffix to float literals in code generation (#6381)
+
+  [ Yong He ]
+  * Simplify implicit cast ctors for vector & matrix. (#6408)
+
+  [ kaizhangNV ]
+  * Metal fix (#6413)
+
+  [ Sai Praveen Bangaru ]
+  * Fix gradient behavior for min() and max() functions at boundaries. When input values are equal, the gradient is split evenly between both inputs. (#6411)
+
+  [ ksavoie-nv ]
+  * Fix slang raytracing test (#6404)
+
+  [ Yong He ]
+  * Improve performance when compiling small shaders. (#6396)
+
+  [ Mukund Keshava ]
+  * Do not perform deep checkout of submodules (#6410)
+  * set depth 2 for CI submodules (#6436)
+
+  [ cheneym2 ]
+  * Remove noise() from core library (#6421)
+
+  [ kaizhangNV ]
+  * Add implementation for 'uploadTextureData' in metal (#6443)
+
+  [ Yong He ]
+  * Fix TypeCheckingCache concurrency and candidate lifetime. (#6444)
+
+  [ Jay Kwak ]
+  * Legalize array size of SV_TessFactor and SV_InsideTessFactor (#6409)
+  * Clone name hint decoration when emiting Undefined (#6415)
+
+  [ Ellie Hermaszewska ]
+  * Fix loading empty structs from structured buffers (#6439)
+
+  [ Sai Praveen Bangaru ]
+  * Fix `UseGraph::replace` (#6395)
+  * Fix a bug with hoisting 'IRVar' insts that are used outside the loop (#6446)
+
+  [ Jay Kwak ]
+  * Enable friendly-name option for SPIRV dump and validation (#6465)
+
+  [ Alexandre Bléron ]
+  * expose value of constant integers in module reflection (#6367)
+
+  [ Yong He ]
+  * [SPIRV]: Emit missing storage class in atomic insts. (#6456)
+
+  [ cheneym2 ]
+  * Fix precompiledTargetModule tests (#6455)
+
+  [ Yong He ]
+  * Fix regression when using Atomic<T> in struct. (#6472)
+
+  [ Anders Leino ]
+  * Improve entry point lookup function documentation (#6451)
+
+  [ Ellie Hermaszewska ]
+  * Bump glslang to vulkan-tmp-1.4.309 (#6477)
+  * bump glslang spirv-header spirv-tools (#6478)
+
+  [ Sai Praveen Bangaru ]
+  * Fix overload resolution for `ModuleDeclarationDecl` (#6483)
+
+  [ Anders Leino ]
+  * Document bug with global session teardown in user guide (#6479)
+
+  [ Yong He ]
+  * Allow `.member` syntax on vector and scalars. (#6424)
+  * Make capability diagnostic message more friendly. (#6474)
+  * Map `SV_InstanceID` to `gl_InstanceIndex-gl_BaseInstance` (#6468)
+
+  [ Devon ]
+  * Add inner texture type to reflection json (#6416)
+
+  [ Simon Kallweit ]
+  * update slang-rhi (shader object refactor) (#6251)
+
+  [ Mukund Keshava ]
+  * Remove adapter option from slang-test (#6475)
+
+  [ Anders Leino ]
+  * Fix a bug where Session::parseCommandLineArguments returns invalid data (#6461)
+
+  [ Yong He ]
+  * Fix CI settings. (#6491)
+  * Fix release CI. (#6492)
+  * Fix doc build. (#6493)
+  * Fix doc. (#6494)
+  * Fix doc. (#6495)
+  * Fix template for deprecated docs. (#6496)
+
+  [ Anders Leino ]
+  * Don't add multiple matrix layout options when creating a session (#6476)
+
+  [ Yong He ]
+  * Fix regression in float to bool conversion. (#6497)
+
+  [ John Zupin ]
+  * packaging: update cmake vars
+  * packaging: debian: rebase patches
+
+ -- john <john@odin>  Tue, 04 Mar 2025 14:10:10 -0700
+
 slang (2024.17+1~rc2-1lunarg24.04-1) noble; urgency=medium
 
   [ John Zupin ]
