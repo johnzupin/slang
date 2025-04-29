@@ -690,6 +690,7 @@ struct IRInst
             m_decorationsAndChildren.last);
     }
     void removeAndDeallocateAllDecorationsAndChildren();
+    bool hasDecorationOrChild() { return m_decorationsAndChildren.first != nullptr; }
 
 #ifdef SLANG_ENABLE_IR_BREAK_ALLOC
     // Unique allocation ID for this instruction since start of current process.
@@ -813,9 +814,13 @@ struct IRInst
     ///
     void _insertAt(IRInst* inPrev, IRInst* inNext, IRInst* inParent);
 
-    /// Print the IR to stdout for debugging purposes
+    /// Print the IR to stdout for debugging purposes.
     ///
     void dump();
+
+    /// Print the IR to a string for debugging purposes.
+    ///
+    void dump(String& outStr);
 
     /// Insert a basic block at the end of this func/code containing inst.
     void addBlock(IRBlock* block);
@@ -1816,12 +1821,6 @@ struct IRRTTIPointerType : IRRawPointerTypeBase
     IR_LEAF_ISA(RTTIPointerType)
 };
 
-struct IRHLSLConstBufferPointerType : IRPtrTypeBase
-{
-    IR_LEAF_ISA(HLSLConstBufferPointerType)
-    IRInst* getBaseAlignment() { return getOperand(1); }
-};
-
 struct IRGlobalHashedStringLiterals : IRInst
 {
     IR_LEAF_ISA(GlobalHashedStringLiterals)
@@ -1868,6 +1867,17 @@ struct IRCoopVectorType : IRType
     IRInst* getElementCount() { return getOperand(1); }
 
     IR_LEAF_ISA(CoopVectorType)
+};
+
+struct IRCoopMatrixType : IRType
+{
+    IRType* getElementType() { return (IRType*)getOperand(0); }
+    IRInst* getScope() { return getOperand(1); }
+    IRInst* getRowCount() { return getOperand(2); }
+    IRInst* getColumnCount() { return getOperand(3); }
+    IRInst* getMatrixUse() { return getOperand(4); }
+
+    IR_LEAF_ISA(CoopMatrixType)
 };
 
 bool isDefinition(IRInst* inVal);

@@ -1,5 +1,6 @@
 #include "slang-emit-wgsl.h"
 
+#include "slang-ir-layout.h"
 #include "slang-ir-util.h"
 
 // A note on row/column "terminology reversal".
@@ -279,8 +280,13 @@ void WGSLSourceEmitter::emitSemanticsPrefixImpl(IRInst* inst)
     }
 }
 
-void WGSLSourceEmitter::emitStructFieldAttributes(IRStructType* structType, IRStructField* field)
+void WGSLSourceEmitter::emitStructFieldAttributes(
+    IRStructType* structType,
+    IRStructField* field,
+    bool allowOffsetLayout)
 {
+    SLANG_UNUSED(allowOffsetLayout);
+
     // Tint emits errors unless we explicitly spell out the layout in some cases, so emit
     // offset and align attribtues for all fields.
     IRSizeAndAlignmentDecoration* const sizeAndAlignmentDecoration =
@@ -511,10 +517,6 @@ void WGSLSourceEmitter::emitSimpleTypeImpl(IRType* type)
     case kIROp_UIntPtrType:
         m_writer->emit("u64");
         return;
-    case kIROp_Int8x4PackedType:
-    case kIROp_UInt8x4PackedType:
-        m_writer->emit("u32");
-        return;
     case kIROp_StructType:
         m_writer->emit(getName(type));
         return;
@@ -659,6 +661,11 @@ void WGSLSourceEmitter::emitSimpleTypeImpl(IRType* type)
             m_writer->emit(">");
             return;
         }
+    case kIROp_ConstantBufferType:
+        {
+            emitType((IRType*)type->getOperand(0));
+            return;
+        }
     default:
         break;
     }
@@ -773,6 +780,13 @@ void WGSLSourceEmitter::emitVarKeywordImpl(IRType* type, IRInst* varDecl)
     if (as<IRGroupSharedRate>(varDecl->getRate()))
     {
         m_writer->emit("<workgroup>");
+    }
+    else if (
+        type->getOp() == kIROp_ArrayType &&
+        type->getOperand(0)->getOp() == kIROp_ConstantBufferType)
+    {
+        // Arrays of constant buffers should use the uniform keyword.
+        m_writer->emit("<uniform>");
     }
     else if (
         type->getOp() == kIROp_HLSLRWStructuredBufferType ||
@@ -967,8 +981,6 @@ void WGSLSourceEmitter::emitSimpleValueImpl(IRInst* inst)
                         return;
                     }
                 case BaseType::UInt:
-                case BaseType::Int8x4Packed:
-                case BaseType::UInt8x4Packed:
                     {
                         m_writer->emit("u32(");
                         m_writer->emit(UInt(uint32_t(litInst->value.intVal)));
@@ -1244,6 +1256,35 @@ bool WGSLSourceEmitter::tryEmitInstStmtImpl(IRInst* inst)
             m_writer->emit("), ");
             emitType(inst->getDataType());
             m_writer->emit("(1));\n");
+            return true;
+        }
+    case kIROp_StructuredBufferGetDimensions:
+        {
+            IRIntegerValue strideValue;
+            auto dataType = inst->getOperand(0)->getDataType();
+            auto structuredBufferType = as<IRHLSLStructuredBufferTypeBase>(dataType);
+            if (structuredBufferType)
+            {
+                auto elementType = structuredBufferType->getElementType();
+                auto sizeDecor = elementType->findDecoration<IRSizeAndAlignmentDecoration>();
+                SLANG_ASSERT(sizeDecor);
+                strideValue = align(sizeDecor->getSize(), (int)sizeDecor->getAlignment());
+            }
+            else
+            {
+                SLANG_ASSERT(as<IRByteAddressBufferTypeBase>(dataType));
+                // ByteAddressBuffer(s) are an array of 32 bit integers, stride is 4 bytes.
+                strideValue = 4;
+            }
+
+            emitInstResultDecl(inst);
+            m_writer->emit("vec2<u32>(");
+            m_writer->emit("arrayLength(&");
+            emitOperand(inst->getOperand(0), getInfo(EmitOp::General));
+            m_writer->emit(")");
+            m_writer->emit(", ");
+            m_writer->emit(strideValue);
+            m_writer->emit(");\n");
             return true;
         }
     }
@@ -1694,6 +1735,11 @@ void WGSLSourceEmitter::handleRequiredCapabilitiesImpl(IRInst* inst)
             }
         }
     }
+}
+
+void WGSLSourceEmitter::emitRequireExtension(IRRequireTargetExtension* inst)
+{
+    _requireExtension(inst->getExtensionName());
 }
 
 } // namespace Slang

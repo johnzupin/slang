@@ -3,6 +3,7 @@
 
 #include "../core/slang-writer.h"
 #include "slang-emit-source-writer.h"
+#include "slang-ir-entry-point-decorations.h"
 #include "slang-ir-util.h"
 #include "slang-mangled-lexer.h"
 
@@ -1099,10 +1100,6 @@ void MetalSourceEmitter::emitSimpleTypeImpl(IRType* type)
     case kIROp_UIntPtrType:
         m_writer->emit("ulong");
         return;
-    case kIROp_Int8x4PackedType:
-    case kIROp_UInt8x4PackedType:
-        m_writer->emit("uint");
-        return;
     case kIROp_StructType:
         m_writer->emit(getName(type));
         return;
@@ -1265,15 +1262,15 @@ void MetalSourceEmitter::emitSimpleTypeImpl(IRType* type)
         m_writer->emit(", ");
         emitOperand(meshType->getNumPrimitives(), getInfo(EmitOp::General));
         m_writer->emit(", metal::topology::");
-        switch (meshType->getTopology()->getValue())
+        switch (OutputTopologyType(meshType->getTopology()->getValue()))
         {
-        case 1:
+        case OutputTopologyType::Point:
             m_writer->emit("point");
             break;
-        case 2:
+        case OutputTopologyType::Line:
             m_writer->emit("line");
             break;
-        case 3:
+        case OutputTopologyType::Triangle:
             m_writer->emit("triangle");
             break;
         }

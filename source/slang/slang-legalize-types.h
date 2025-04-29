@@ -659,6 +659,12 @@ struct IRTypeLegalizationContext
         IROp op,
         LegalType legalElementType,
         IRInst* layoutOperand) = 0;
+
+    /// Customization point to decide whether a parameter block type should be legalized.
+    ///
+    /// This function is called in `legalizeTypeImpl` to decide whether a parameter block
+    /// type should be legalized. Not all legalization passes need to legalize parameter block.
+    virtual bool shouldLegalizeParameterBlockElementType() { return false; }
 };
 
 // This typedef exists to support pre-existing code from when
@@ -702,8 +708,6 @@ void legalizeResourceTypes(TargetProgram* target, IRModule* module, DiagnosticSi
 void legalizeEmptyTypes(TargetProgram* target, IRModule* module, DiagnosticSink* sink);
 
 bool isResourceType(IRType* type);
-
-bool isOpaqueType(IRType* type, List<IRType*>& opaqueTypes);
 
 SourceLoc findBestSourceLocFromUses(IRInst* inst);
 } // namespace Slang

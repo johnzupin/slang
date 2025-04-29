@@ -38,6 +38,7 @@
 #include "slang-ir-early-raytracing-intrinsic-simplification.h"
 #include "slang-ir-eliminate-multilevel-break.h"
 #include "slang-ir-eliminate-phis.h"
+#include "slang-ir-entry-point-decorations.h"
 #include "slang-ir-entry-point-raw-ptr-params.h"
 #include "slang-ir-entry-point-uniforms.h"
 #include "slang-ir-explicit-global-context.h"
@@ -78,6 +79,7 @@
 #include "slang-ir-lower-tuple-types.h"
 #include "slang-ir-metadata.h"
 #include "slang-ir-metal-legalize.h"
+#include "slang-ir-missing-return.h"
 #include "slang-ir-optix-entry-point-uniforms.h"
 #include "slang-ir-pytorch-cpp-binding.h"
 #include "slang-ir-redundancy-removal.h"
@@ -100,7 +102,7 @@
 #include "slang-ir-strip-default-construct.h"
 #include "slang-ir-strip-legalization-insts.h"
 #include "slang-ir-synthesize-active-mask.h"
-#include "slang-ir-translate-glsl-global-var.h"
+#include "slang-ir-translate-global-varying-var.h"
 #include "slang-ir-uniformity.h"
 #include "slang-ir-user-type-hint.h"
 #include "slang-ir-validate.h"
@@ -318,13 +320,14 @@ struct RequiredLoweringPassSet
     bool bindingQuery;
     bool meshOutput;
     bool higherOrderFunc;
-    bool glslGlobalVar;
+    bool globalVaryingVar;
     bool glslSSBO;
     bool byteAddressBuffer;
     bool dynamicResource;
     bool dynamicResourceHeap;
     bool resolveVaryingInputRef;
     bool specializeStageSwitch;
+    bool missingReturn;
 };
 
 // Scan the IR module and determine which lowering/legalization passes are needed based
@@ -422,7 +425,7 @@ void calcRequiredLoweringPassSet(
     case kIROp_GlobalInputDecoration:
     case kIROp_GlobalOutputDecoration:
     case kIROp_GetWorkGroupSize:
-        result.glslGlobalVar = true;
+        result.globalVaryingVar = true;
         break;
     case kIROp_BindExistentialSlotsDecoration:
         result.bindExistential = true;
@@ -449,6 +452,9 @@ void calcRequiredLoweringPassSet(
         break;
     case kIROp_GetCurrentStage:
         result.specializeStageSwitch = true;
+        break;
+    case kIROp_MissingReturn:
+        result.missingReturn = true;
         break;
     }
     if (!result.generics || !result.existentialTypeLayout)
@@ -596,20 +602,101 @@ static void unexportNonEmbeddableIR(CodeGenTarget target, IRModule* irModule)
     }
 }
 
-static void validateMatrixDimensions(DiagnosticSink* sink, IRModule* module)
+static void validateVectorOrMatrixElementType(
+    DiagnosticSink* sink,
+    SourceLoc sourceLoc,
+    IRType* elementType,
+    uint32_t allowedWidths,
+    const DiagnosticInfo& disallowedElementTypeEncountered)
+{
+    if (!isFloatingType(elementType))
+    {
+        if (isIntegralType(elementType))
+        {
+            IntInfo info = getIntTypeInfo(elementType);
+            if (allowedWidths == 0U)
+            {
+                sink->diagnose(sourceLoc, disallowedElementTypeEncountered, elementType);
+            }
+            else
+            {
+                bool widthAllowed = false;
+                SLANG_ASSERT((allowedWidths & ~(0xfU << 3)) == 0U);
+                for (uint32_t p = 3U; p <= 6U; p++)
+                {
+                    uint32_t width = 1U << p;
+                    if (!(allowedWidths & width))
+                        continue;
+                    widthAllowed = widthAllowed || (info.width == width);
+                }
+                if (!widthAllowed)
+                {
+                    sink->diagnose(sourceLoc, disallowedElementTypeEncountered, elementType);
+                }
+            }
+        }
+        else if (!as<IRBoolType>(elementType))
+        {
+            sink->diagnose(sourceLoc, disallowedElementTypeEncountered, elementType);
+        }
+    }
+}
+
+static void validateVectorsAndMatrices(
+    DiagnosticSink* sink,
+    IRModule* module,
+    TargetRequest* targetRequest)
 {
     for (auto globalInst : module->getGlobalInsts())
     {
         if (auto matrixType = as<IRMatrixType>(globalInst))
         {
-            auto colCount = as<IRIntLit>(matrixType->getColumnCount());
-            auto rowCount = as<IRIntLit>(matrixType->getRowCount());
-
-            if ((rowCount && (rowCount->getValue() == 1)) ||
-                (colCount && (colCount->getValue() == 1)))
+            // Matrices with row/col dimension 1 are only well-supported on D3D targets
+            if (!isD3DTarget(targetRequest))
             {
-                sink->diagnose(matrixType->sourceLoc, Diagnostics::matrixColumnOrRowCountIsOne);
+                // Verify that neither row nor col count is 1
+                auto colCount = as<IRIntLit>(matrixType->getColumnCount());
+                auto rowCount = as<IRIntLit>(matrixType->getRowCount());
+
+                if ((rowCount && (rowCount->getValue() == 1)) ||
+                    (colCount && (colCount->getValue() == 1)))
+                {
+                    sink->diagnose(matrixType->sourceLoc, Diagnostics::matrixColumnOrRowCountIsOne);
+                }
             }
+
+            // Verify that the element type is a floating point type, or an allowed integral type
+            auto elementType = matrixType->getElementType();
+            uint32_t allowedWidths = 0U;
+            if (isCPUTarget(targetRequest))
+                allowedWidths = 8U | 16U | 32U | 64U;
+            else if (isCUDATarget(targetRequest))
+                allowedWidths = 32U | 64U;
+            else if (isD3DTarget(targetRequest))
+                allowedWidths = 16U | 32U;
+            validateVectorOrMatrixElementType(
+                sink,
+                matrixType->sourceLoc,
+                elementType,
+                allowedWidths,
+                Diagnostics::matrixWithDisallowedElementTypeEncountered);
+        }
+        else if (auto vectorType = as<IRVectorType>(globalInst))
+        {
+            // Verify that the element type is a floating point type, or an allowed integral type
+            auto elementType = vectorType->getElementType();
+            uint32_t allowedWidths = 0U;
+            if (isWGPUTarget(targetRequest))
+                allowedWidths = 32U;
+            else
+                allowedWidths = 8U | 16U | 32U | 64U;
+
+            validateVectorOrMatrixElementType(
+                sink,
+                vectorType->sourceLoc,
+                elementType,
+                allowedWidths,
+                Diagnostics::vectorWithDisallowedElementTypeEncountered);
         }
     }
 }
@@ -667,8 +754,8 @@ Result linkAndOptimizeIR(
     if (!isKhronosTarget(targetRequest) && requiredLoweringPassSet.glslSSBO)
         lowerGLSLShaderStorageBufferObjectsToStructuredBuffers(irModule, sink);
 
-    if (requiredLoweringPassSet.glslGlobalVar)
-        translateGLSLGlobalVar(codeGenContext, irModule);
+    if (requiredLoweringPassSet.globalVaryingVar)
+        translateGlobalVaryingVar(codeGenContext, irModule);
 
     if (requiredLoweringPassSet.resolveVaryingInputRef)
         resolveVaryingInputRef(irModule);
@@ -721,6 +808,8 @@ Result linkAndOptimizeIR(
     dumpIRIfEnabled(codeGenContext, irModule, "GLOBAL UNIFORMS COLLECTED");
 #endif
     validateIRModuleIfEnabled(codeGenContext, irModule);
+
+    checkEntryPointDecorations(irModule, target, sink);
 
     // Another transformation that needed to wait until we
     // had layout information on parameters is to take uniform
@@ -948,7 +1037,10 @@ Result linkAndOptimizeIR(
 
     // Report checkpointing information
     if (codeGenContext->shouldReportCheckpointIntermediates())
+    {
+        simplifyIR(targetProgram, irModule, fastIRSimplificationOptions, sink);
         reportCheckpointIntermediates(codeGenContext, sink, irModule);
+    }
 
     // Finalization is always run so AD-related instructions can be removed,
     // even if the AD pass itself is not run.
@@ -997,6 +1089,9 @@ Result linkAndOptimizeIR(
     {
         checkForRecursiveTypes(irModule, sink);
         checkForRecursiveFunctions(codeGenContext->getTargetReq(), irModule, sink);
+
+        if (requiredLoweringPassSet.missingReturn)
+            checkForMissingReturns(irModule, sink, target, false);
 
         // For some targets, we are more restrictive about what types are allowed
         // to be used as shader parameters in ConstantBuffer/ParameterBlock.
@@ -1186,6 +1281,15 @@ Result linkAndOptimizeIR(
         //
         legalizeResourceTypes(targetProgram, irModule, sink);
 
+        // We also need to legalize empty types for Metal targets.
+        switch (target)
+        {
+        case CodeGenTarget::Metal:
+        case CodeGenTarget::MetalLib:
+        case CodeGenTarget::MetalLibAssembly:
+            legalizeEmptyTypes(targetProgram, irModule, sink);
+            break;
+        }
         //  Debugging output of legalization
 #if 0
         dumpIRIfEnabled(codeGenContext, irModule, "LEGALIZED");
@@ -1599,9 +1703,8 @@ Result linkAndOptimizeIR(
 #endif
     validateIRModuleIfEnabled(codeGenContext, irModule);
 
-    // Make sure there are no matrices with 1 row/column, except for D3D targets where it's allowed.
-    if (!isD3DTarget(targetRequest))
-        validateMatrixDimensions(sink, irModule);
+    // Validate vectors and matrices according to what the target allows
+    validateVectorsAndMatrices(sink, irModule, targetRequest);
 
     // The resource-based specialization pass above
     // may create specialized versions of functions, but
@@ -1612,6 +1715,8 @@ Result linkAndOptimizeIR(
     // We run DCE pass again to clean things up.
     //
     eliminateDeadCode(irModule, deadCodeEliminationOptions);
+
+    cleanUpVoidType(irModule);
 
     if (isKhronosTarget(targetRequest))
     {
@@ -1625,7 +1730,6 @@ Result linkAndOptimizeIR(
 #endif
     validateIRModuleIfEnabled(codeGenContext, irModule);
 
-    cleanUpVoidType(irModule);
 
     // Lower the `getRegisterIndex` and `getRegisterSpace` intrinsics.
     //
@@ -1644,10 +1748,11 @@ Result linkAndOptimizeIR(
     bufferElementTypeLoweringOptions.use16ByteArrayElementForConstantBuffer =
         isWGPUTarget(targetRequest);
     lowerBufferElementTypeToStorageType(targetProgram, irModule, bufferElementTypeLoweringOptions);
+    performForceInlining(irModule);
 
     // Rewrite functions that return arrays to return them via `out` parameter,
     // since our target languages doesn't allow returning arrays.
-    if (!isMetalTarget(targetRequest))
+    if (!isMetalTarget(targetRequest) && !isSPIRV(target))
         legalizeArrayReturnType(irModule);
 
     if (isKhronosTarget(targetRequest) || target == CodeGenTarget::HLSL)
@@ -1669,8 +1774,8 @@ Result linkAndOptimizeIR(
     if (emitSpirvDirectly)
     {
         performIntrinsicFunctionInlining(irModule);
-        eliminateDeadCode(irModule, deadCodeEliminationOptions);
     }
+
     eliminateMultiLevelBreak(irModule);
 
     if (!fastIRSimplificationOptions.minimalOptimization)
@@ -2093,9 +2198,70 @@ SlangResult emitSPIRVForEntryPointsDirectly(
     if (compiler)
     {
 #if 0
-        // Dump the unoptimized SPIRV after lowering from slang IR -> SPIRV
+        // Dump the unoptimized/unlinked SPIRV after lowering from slang IR -> SPIRV
         compiler->disassemble((uint32_t*)spirv.getBuffer(), int(spirv.getCount() / 4));
 #endif
+
+        bool isPrecompilation = codeGenContext->getTargetProgram()->getOptionSet().getBoolOption(
+            CompilerOptionName::EmbedDownstreamIR);
+
+        if (!isPrecompilation && !codeGenContext->shouldSkipDownstreamLinking())
+        {
+            ComPtr<IArtifact> linkedArtifact;
+
+            // collect spirv files
+            List<uint32_t*> spirvFiles;
+            List<uint32_t> spirvSizes;
+
+            // Start with the SPIR-V we just generated.
+            // SPIRV-Tools-link expects the size in 32-bit words
+            // whereas the spirv blob size is in bytes.
+            spirvFiles.add((uint32_t*)spirv.getBuffer());
+            spirvSizes.add(int(spirv.getCount()) / 4);
+
+            // Iterate over all modules in the linkedIR. For each module, if it
+            // contains an embedded downstream ir instruction, add it to the list
+            // of spirv files.
+            auto program = codeGenContext->getProgram();
+
+            program->enumerateIRModules(
+                [&](IRModule* irModule)
+                {
+                    for (auto globalInst : irModule->getModuleInst()->getChildren())
+                    {
+                        if (auto inst = as<IREmbeddedDownstreamIR>(globalInst))
+                        {
+                            if (inst->getTarget() == CodeGenTarget::SPIRV)
+                            {
+                                auto slice = inst->getBlob()->getStringSlice();
+                                spirvFiles.add((uint32_t*)slice.begin());
+                                spirvSizes.add(int(slice.getLength()) / 4);
+                            }
+                        }
+                    }
+                });
+
+            SLANG_ASSERT(int(spirv.getCount()) % 4 == 0);
+            SLANG_ASSERT(spirvFiles.getCount() == spirvSizes.getCount());
+
+            if (spirvFiles.getCount() > 1)
+            {
+                SlangResult linkresult = compiler->link(
+                    (const uint32_t**)spirvFiles.getBuffer(),
+                    (const uint32_t*)spirvSizes.getBuffer(),
+                    (uint32_t)spirvFiles.getCount(),
+                    linkedArtifact.writeRef());
+
+                if (linkresult != SLANG_OK)
+                {
+                    return SLANG_FAIL;
+                }
+
+                ComPtr<ISlangBlob> blob;
+                linkedArtifact->loadBlob(ArtifactKeep::No, blob.writeRef());
+                artifact = _Move(linkedArtifact);
+            }
+        }
 
         if (!codeGenContext->shouldSkipSPIRVValidation())
         {

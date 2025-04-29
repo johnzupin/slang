@@ -56,6 +56,7 @@ void depointerizeInputParams(IRFunc* entryPoint);
     M(IsFrontFace, SV_IsFrontFace)                       \
     M(OutputControlPointID, SV_OutputControlPointID)     \
     M(PointSize, SV_PointSize)                           \
+    M(PointCoord, SV_PointCoord)                         \
     M(PrimitiveID, SV_PrimitiveID)                       \
     M(DrawIndex, SV_DrawIndex)                           \
     M(RenderTargetArrayIndex, SV_RenderTargetArrayIndex) \
@@ -68,7 +69,10 @@ void depointerizeInputParams(IRFunc* entryPoint);
     M(Target, SV_Target)                                 \
     M(StartVertexLocation, SV_StartVertexLocation)       \
     M(StartInstanceLocation, SV_StartInstanceLocation)   \
-    /* end */
+    M(WaveLaneCount, SV_WaveLaneCount)                   \
+    M(WaveLaneIndex, SV_WaveLaneIndex)                   \
+    M(QuadLaneIndex, SV_QuadLaneIndex)                   \
+/* end */
 
 /// A known system-value semantic name that can be applied to a parameter
 ///

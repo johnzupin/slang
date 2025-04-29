@@ -27,13 +27,13 @@ jobs:
           - {
               os: linux,
               platform: x86_64,
-              runs-on: ubuntu-22.04,
+              runs-on: ubuntu-latest,
               compiler: gcc,
             }
           - {
               os: linux,
               platform: aarch64,
-              runs-on: ubuntu-22.04-arm,
+              runs-on: ubuntu-24.04-arm,
               compiler: gcc,
             }
           - { os: windows, runs-on: windows-latest, compiler: cl }
@@ -56,6 +56,12 @@ jobs:
         with:
           submodules: "recursive"
           fetch-depth: "0"
+      - name: Install dependencies
+        run: |
+          if [[ "${{ matrix.os }}" = "linux" ]]; then
+              sudo apt-get update
+              sudo apt-get install -y libx11-dev
+          fi
       - name: Setup
         uses: ./.github/actions/common-setup
         with:
@@ -169,7 +175,12 @@ jobs:
           cpack --preset "$config-debug-info" -G TGZ
 
           triggering_ref=${{ github.ref_name }}
-          base=slang-${triggering_ref#v}-${{matrix.os}}-${{matrix.platform}}
+          if [[ $triggering_ref =~ ^v[0-9] ]]; then
+            version=${triggering_ref#v}
+          else
+            version=$triggering_ref
+          fi
+          base=slang-${version}-${{matrix.os}}-${{matrix.platform}}
 
           # Move main packages
           mv "$(pwd)/build/dist-${config}/slang.zip" "${base}.zip"

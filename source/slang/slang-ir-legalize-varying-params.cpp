@@ -3154,6 +3154,14 @@ protected:
                 result.permittedTypes.add(builder.getBasicType(BaseType::Float));
                 break;
             }
+        case SystemValueSemanticName::PointCoord:
+            {
+                result.systemValueName = toSlice("point_coord");
+                result.permittedTypes.add(builder.getVectorType(
+                    builder.getBasicType(BaseType::Float),
+                    builder.getIntValue(builder.getIntType(), 2)));
+                break;
+            }
         case SystemValueSemanticName::PrimitiveID:
             {
                 result.systemValueName = toSlice("primitive_id");
@@ -3226,6 +3234,27 @@ protected:
             {
                 result.systemValueName = toSlice("base_instance");
                 result.permittedTypes.add(builder.getBasicType(BaseType::UInt));
+                break;
+            }
+        case SystemValueSemanticName::WaveLaneCount:
+            {
+                result.systemValueName = toSlice("threads_per_simdgroup");
+                result.permittedTypes.add(builder.getUIntType());
+                result.permittedTypes.add(builder.getUInt16Type());
+                break;
+            }
+        case SystemValueSemanticName::WaveLaneIndex:
+            {
+                result.systemValueName = toSlice("thread_index_in_simdgroup");
+                result.permittedTypes.add(builder.getUIntType());
+                result.permittedTypes.add(builder.getUInt16Type());
+                break;
+            }
+        case SystemValueSemanticName::QuadLaneIndex:
+            {
+                result.systemValueName = toSlice("thread_index_in_quadgroup");
+                result.permittedTypes.add(builder.getUInt16Type());
+                result.permittedTypes.add(builder.getUIntType());
                 break;
             }
         default:
@@ -3504,27 +3533,8 @@ protected:
             SLANG_UNEXPECTED("Mesh shader output decoration missing");
             return;
         }
-        const auto topology = outputDeco->getTopology();
-        const auto topStr = topology->getStringSlice();
-        UInt topologyEnum = 0;
-        if (topStr.caseInsensitiveEquals(toSlice("point")))
-        {
-            topologyEnum = 1;
-        }
-        else if (topStr.caseInsensitiveEquals(toSlice("line")))
-        {
-            topologyEnum = 2;
-        }
-        else if (topStr.caseInsensitiveEquals(toSlice("triangle")))
-        {
-            topologyEnum = 3;
-        }
-        else
-        {
-            SLANG_UNEXPECTED("unknown topology");
-            return;
-        }
 
+        const auto topologyEnum = outputDeco->getTopologyType();
         IRInst* topologyConst = builder.getIntValue(builder.getIntType(), topologyEnum);
 
         IRType* vertexType = nullptr;
@@ -3802,6 +3812,7 @@ protected:
 
         case SystemValueSemanticName::OutputControlPointID:
         case SystemValueSemanticName::PointSize:
+        case SystemValueSemanticName::PointCoord:
             {
                 result.isUnsupported = true;
             }
@@ -3845,6 +3856,20 @@ protected:
                 break;
             }
 
+        case SystemValueSemanticName::WaveLaneCount:
+            {
+                result.systemValueName = toSlice("subgroup_size");
+                result.permittedTypes.add(builder.getUIntType());
+                break;
+            }
+
+        case SystemValueSemanticName::WaveLaneIndex:
+            {
+                result.systemValueName = toSlice("subgroup_invocation_id");
+                result.permittedTypes.add(builder.getUIntType());
+                break;
+            }
+
         case SystemValueSemanticName::ViewID:
         case SystemValueSemanticName::ViewportArrayIndex:
         case SystemValueSemanticName::StartVertexLocation:
@@ -3853,7 +3878,6 @@ protected:
                 result.isUnsupported = true;
                 break;
             }
-
         default:
             {
                 m_sink->diagnose(

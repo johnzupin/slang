@@ -1266,7 +1266,6 @@ AttributeBase* SemanticsVisitor::checkAttribute(
     //
     // The attribute declaration will have one or more `AttributeTargetModifier`s
     // that each specify a syntax class that the attribute can be applied to.
-    // If any of these match `attrTarget`, then we are good.
     //
     bool validTarget = false;
     for (auto attrTargetMod : attrDecl->getModifiersOfType<AttributeTargetModifier>())
@@ -1277,6 +1276,18 @@ AttributeBase* SemanticsVisitor::checkAttribute(
             break;
         }
     }
+
+    // Some attributes impose constraints on where they can be placed that cannot be captured by the
+    // only checking the syntax class. Perform more checks here.
+    switch (attr->astNodeType)
+    {
+    // Allowed only on struct fields.
+    case ASTNodeType::VkStructOffsetAttribute:
+        auto targetDecl = as<Decl>(attrTarget);
+        validTarget = validTarget && targetDecl && as<StructDecl>(getParentDecl(targetDecl));
+        break;
+    };
+
     if (!validTarget)
     {
         getSink()->diagnose(attr, Diagnostics::attributeNotApplicable, attrName);
@@ -1327,6 +1338,7 @@ ASTNodeType getModifierConflictGroupKind(ASTNodeType modifierType)
     case ASTNodeType::GLSLLayoutModifierGroupBegin:
     case ASTNodeType::GLSLLayoutModifierGroupEnd:
     case ASTNodeType::GLSLBufferModifier:
+    case ASTNodeType::VkStructOffsetAttribute:
     case ASTNodeType::MemoryQualifierSetModifier:
     case ASTNodeType::GLSLWriteOnlyModifier:
     case ASTNodeType::GLSLReadOnlyModifier:
@@ -1413,9 +1425,20 @@ bool isModifierAllowedOnDecl(bool isGLSLInput, ASTNodeType modifierType, Decl* d
     case ASTNodeType::ConstRefModifier:
     case ASTNodeType::GLSLBufferModifier:
     case ASTNodeType::GLSLPatchModifier:
+        return (as<VarDeclBase>(decl) && isGlobalDecl(decl)) || as<ParamDecl>(decl) ||
+               as<GLSLInterfaceBlockDecl>(decl);
     case ASTNodeType::RayPayloadAccessSemantic:
     case ASTNodeType::RayPayloadReadSemantic:
     case ASTNodeType::RayPayloadWriteSemantic:
+        // Allow on struct fields if the parent struct has the [raypayload] attribute
+        if (auto varDecl = as<VarDeclBase>(decl))
+        {
+            if (auto structDecl = as<StructDecl>(varDecl->parentDecl))
+            {
+                if (structDecl->findModifier<RayPayloadAttribute>())
+                    return true;
+            }
+        }
         return (as<VarDeclBase>(decl) && isGlobalDecl(decl)) || as<ParamDecl>(decl) ||
                as<GLSLInterfaceBlockDecl>(decl);
 
@@ -2177,6 +2200,37 @@ void SemanticsVisitor::checkModifiers(ModifiableSyntaxNode* syntaxNode)
     }
 
     postProcessingOnModifiers(syntaxNode->modifiers);
+}
+
+void SemanticsVisitor::checkRayPayloadStructFields(StructDecl* structDecl)
+{
+    // Only check structs with the [raypayload] attribute
+    if (!structDecl->findModifier<RayPayloadAttribute>())
+    {
+        return;
+    }
+
+    // Check each field in the struct
+    for (auto member : structDecl->members)
+    {
+        auto fieldVarDecl = as<VarDeclBase>(member);
+        if (!fieldVarDecl)
+        {
+            continue;
+        }
+
+        bool hasReadModifier = fieldVarDecl->findModifier<RayPayloadReadSemantic>() != nullptr;
+        bool hasWriteModifier = fieldVarDecl->findModifier<RayPayloadWriteSemantic>() != nullptr;
+
+        if (!hasReadModifier && !hasWriteModifier)
+        {
+            // Emit the diagnostic error
+            getSink()->diagnose(
+                fieldVarDecl,
+                Diagnostics::rayPayloadFieldMissingAccessQualifiers,
+                fieldVarDecl->getName());
+        }
+    }
 }
 
 

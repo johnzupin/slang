@@ -42,8 +42,10 @@ public:
     virtual void _emitType(IRType* type, DeclaratorInfo* declarator) SLANG_OVERRIDE;
     virtual void emitFrontMatterImpl(TargetRequest* targetReq) SLANG_OVERRIDE;
     virtual void emitSemanticsPrefixImpl(IRInst* inst) SLANG_OVERRIDE;
-    virtual void emitStructFieldAttributes(IRStructType* structType, IRStructField* field)
-        SLANG_OVERRIDE;
+    virtual void emitStructFieldAttributes(
+        IRStructType* structType,
+        IRStructField* field,
+        bool allowOffsetLayout) SLANG_OVERRIDE;
     virtual void emitCallArg(IRInst* inst) SLANG_OVERRIDE;
     virtual void emitInterpolationModifiersImpl(
         IRInst* varInst,
@@ -56,6 +58,8 @@ public:
         IRInst* intrinsicInst,
         EmitOpInfo const& inOuterPrec) SLANG_OVERRIDE;
     virtual void emitGlobalParamDefaultVal(IRGlobalParam* varDecl) SLANG_OVERRIDE;
+
+    virtual void emitRequireExtension(IRRequireTargetExtension* inst) SLANG_OVERRIDE;
 
     virtual void handleRequiredCapabilitiesImpl(IRInst* inst) SLANG_OVERRIDE;
 

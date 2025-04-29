@@ -429,6 +429,34 @@ DIAGNOSTIC(
     Warning,
     pragmaOnceIgnored,
     "pragma once was ignored - this is typically because is not placed in an include")
+DIAGNOSTIC(15610, Error, pragmaWarningGenericError, "Error in #pragma warning processing: $0")
+DIAGNOSTIC(
+    15611,
+    Warning,
+    pragmaWarningPopEmpty,
+    "Detected #pragma warning(pop) with no corresponding #pragma warning(push)")
+DIAGNOSTIC(
+    15612,
+    Warning,
+    pragmaWarningPushNotPopped,
+    "Detected #pragma warning(push) with no corresponding #pragma warning(pop)")
+DIAGNOSTIC(15613, Warning, pragmaWarningUnknownSpecifier, "Unknown #pragma warning specifier '$0'")
+DIAGNOSTIC(
+    15614,
+    Warning,
+    pragmaWarningSuppressCannotIdentifyNextLine,
+    "Cannot identify the next line to suppress in #pragma warning suppress")
+DIAGNOSTIC(
+    15615,
+    Warning,
+    pragmaWarningCannotInsertHere,
+    "Cannot insert #pragma warning here for id '$0'")
+DIAGNOSTIC(
+    15616,
+    Note,
+    pragmaWarningPointSuppress,
+    "#pragma warning for id '$0' was suppressed here")
+
 
 // 159xx - user-defined error/warning
 DIAGNOSTIC(15900, Error, userDefinedError, "#error: $0")
@@ -761,6 +789,13 @@ DIAGNOSTIC(
     "cannot specialize generic '$0' with the provided arguments.")
 
 DIAGNOSTIC(30076, Error, globalVarCannotHaveOpaqueType, "global variable cannot have opaque type.")
+DIAGNOSTIC(
+    30077,
+    Error,
+    concreteArgumentToOutputInterface,
+    "argument passed to parameter '$0' is of concrete type '$1', but interface-typed output "
+    "parameters require interface-typed arguments. To allow passing a concrete type to this "
+    "function, you can replace '$2 $0' with a generic 'T $0' and a 'where T : $2' constraint.")
 DIAGNOSTIC(-1, Note, doYouMeanStaticConst, "do you intend to define a `static const` instead?")
 DIAGNOSTIC(-1, Note, doYouMeanUniform, "do you intend to define a `uniform` parameter instead?")
 
@@ -890,6 +925,14 @@ DIAGNOSTIC(
 DIAGNOSTIC(30106, Error, improperUseOfType, "type '$0' cannot be used in this context.")
 DIAGNOSTIC(30107, Error, parameterPackMustBeConst, "a parameter pack must be declared as 'const'.")
 
+DIAGNOSTIC(30108, Error, breakInsideDefer, "'break' must not appear inside a defer statement.")
+DIAGNOSTIC(
+    30109,
+    Error,
+    continueInsideDefer,
+    "'continue' must not appear inside a defer statement.")
+DIAGNOSTIC(30110, Error, returnInsideDefer, "'return' must not appear inside a defer statement.")
+
 
 // Include
 DIAGNOSTIC(
@@ -925,6 +968,12 @@ DIAGNOSTIC(
     implementingMustReferencePrimaryModuleFile,
     "the source file referenced by 'implementing' must be a primary module file starting with a "
     "'module' declaration.")
+DIAGNOSTIC(
+    30506,
+    Warning,
+    moduleImplementationHasFileExtension,
+    "implementing directive contains file extension in module name '$0'. Module names should not "
+    "include extensions. The compiler will use '$1' as the module name.")
 
 // Visibilty
 DIAGNOSTIC(30600, Error, declIsNotVisible, "'$0' is not accessible from the current context.")
@@ -1915,6 +1964,18 @@ DIAGNOSTIC(
     "mode, specify 'SlangGlobalSessionDesc::enableGLSL' when creating the global session.")
 DIAGNOSTIC(39999, Fatal, complationCeased, "compilation ceased")
 
+DIAGNOSTIC(
+    38202,
+    Error,
+    matrixWithDisallowedElementTypeEncountered,
+    "matrix with disallowed element type '$0' encountered")
+
+DIAGNOSTIC(
+    38203,
+    Error,
+    vectorWithDisallowedElementTypeEncountered,
+    "vector with disallowed element type '$0' encountered")
+
 // 39xxx - Type layout and parameter binding.
 
 DIAGNOSTIC(
@@ -2146,6 +2207,11 @@ DIAGNOSTIC(
 DIAGNOSTIC(41000, Warning, unreachableCode, "unreachable code detected")
 DIAGNOSTIC(41001, Error, recursiveType, "type '$0' contains cyclic reference to itself.")
 
+DIAGNOSTIC(
+    41009,
+    Error,
+    missingReturnError,
+    "non-void function must return in all cases for target '$0'")
 DIAGNOSTIC(41010, Warning, missingReturn, "non-void function does not return in all cases")
 DIAGNOSTIC(
     41011,
@@ -2203,12 +2269,12 @@ DIAGNOSTIC(
     Error,
     typeDoesNotFitAnyValueSize,
     "type '$0' does not fit in the size required by its conforming interface.")
-DIAGNOSTIC(41012, Note, typeAndLimit, "sizeof($0) is $1, limit is $2")
+DIAGNOSTIC(-1, Note, typeAndLimit, "sizeof($0) is $1, limit is $2")
 DIAGNOSTIC(
-    41012,
+    41014,
     Error,
     typeCannotBePackedIntoAnyValue,
-    "type '$0' contains fields that cannot be packed into an AnyValue.")
+    "type '$0' contains fields that cannot be packed into ordinary bytes for dynamic dispatch.")
 DIAGNOSTIC(
     41020,
     Error,
@@ -2298,12 +2364,6 @@ DIAGNOSTIC(
     Error,
     notEqualBitCastSize,
     "invalid to bit_cast differently sized types: '$0' with size '$1' casted into '$2' with size "
-    "'$3'")
-DIAGNOSTIC(
-    41203,
-    Warning,
-    notEqualReinterpretCastSize,
-    "reinterpret<> into not equally sized types: '$0' with size '$1' casted into '$2' with size "
     "'$3'")
 
 DIAGNOSTIC(
@@ -2436,6 +2496,12 @@ DIAGNOSTIC(
     Error,
     invalidTessellationDomain,
     "'Domain' should be either 'triangles' or 'quads'.")
+
+DIAGNOSTIC(
+    50060,
+    Error,
+    invalidMeshStageOutputTopology,
+    "Invalid mesh stage output topology '$0' for target '$1', must be one of: $2")
 
 DIAGNOSTIC(
     50082,
@@ -2584,6 +2650,11 @@ DIAGNOSTIC(
     resourceTypesInConstantBufferInParameterBlockNotAllowedOnMetal,
     "nesting a 'ConstantBuffer' containing resource types inside a 'ParameterBlock' is not "
     "supported on Metal, please use 'ParameterBlock' instead.")
+DIAGNOSTIC(
+    56102,
+    Error,
+    divisionByMatrixNotSupported,
+    "division by matrix is not supported for Metal and WGSL targets.")
 
 DIAGNOSTIC(57001, Warning, spirvOptFailed, "spirv-opt failed. $0")
 DIAGNOSTIC(57002, Error, unknownPatchConstantParameter, "unknown patch constant parameter '$0'.")
@@ -2676,5 +2747,15 @@ DIAGNOSTIC(
     Internal,
     noBlocksOrIntrinsic,
     "no blocks found for function definition, is there a '$0' intrinsic missing?")
+
+//
+// Ray tracing
+//
+
+DIAGNOSTIC(
+    40000,
+    Error,
+    rayPayloadFieldMissingAccessQualifiers,
+    "field '$0' in ray payload struct must have either 'read' OR 'write' access qualifiers")
 
 #undef DIAGNOSTIC

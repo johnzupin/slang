@@ -4,6 +4,7 @@
 #include "../compiler-core/slang-artifact-desc-util.h"
 #include "slang-check-impl.h"
 #include "slang-ir-insts.h"
+#include "slang-mangle.h"
 #include "slang-syntax.h"
 
 #include <assert.h>
@@ -109,10 +110,6 @@ struct DefaultLayoutRulesImpl : SimpleLayoutRulesImpl
                 LayoutResourceKind::Uniform,
                 sizeof(intptr_t),
                 sizeof(intptr_t));
-
-        case BaseType::Int8x4Packed:
-        case BaseType::UInt8x4Packed:
-            return SimpleLayoutInfo(LayoutResourceKind::Uniform, 4, 4);
 
         case BaseType::Half:
             return SimpleLayoutInfo(LayoutResourceKind::Uniform, 2, 2);
@@ -2511,9 +2508,9 @@ bool isMetalTarget(TargetRequest* targetReq)
     }
 }
 
-bool isKhronosTarget(TargetRequest* targetReq)
+bool isKhronosTarget(CodeGenTarget target)
 {
-    switch (targetReq->getTarget())
+    switch (target)
     {
     default:
         return false;
@@ -2523,6 +2520,11 @@ bool isKhronosTarget(TargetRequest* targetReq)
     case CodeGenTarget::SPIRVAssembly:
         return true;
     }
+}
+
+bool isKhronosTarget(TargetRequest* targetReq)
+{
+    return isKhronosTarget(targetReq->getTarget());
 }
 
 bool isCPUTarget(TargetRequest* targetReq)
@@ -2544,9 +2546,9 @@ bool isCUDATarget(TargetRequest* targetReq)
     }
 }
 
-bool isWGPUTarget(TargetRequest* targetReq)
+bool isWGPUTarget(CodeGenTarget target)
 {
-    switch (targetReq->getTarget())
+    switch (target)
     {
     default:
         return false;
@@ -2556,6 +2558,11 @@ bool isWGPUTarget(TargetRequest* targetReq)
     case CodeGenTarget::WGSLSPIRVAssembly:
         return true;
     }
+}
+
+bool isWGPUTarget(TargetRequest* targetReq)
+{
+    return isWGPUTarget(targetReq->getTarget());
 }
 
 SourceLanguage getIntermediateSourceLanguageForTarget(TargetProgram* targetProgram)
@@ -5013,7 +5020,12 @@ static TypeLayoutResult _createTypeLayout(TypeLayoutContext& context, Type* type
     }
     else if (auto declRefType = as<DeclRefType>(type))
     {
+        // If we are trying to get the layout of some extern type, do our best
+        // to look it up in other loaded modules and generate the type layout
+        // based on that.
+        declRefType = context.lookupExternDeclRefType(declRefType);
         auto declRef = declRefType->getDeclRef();
+
 
         if (auto structDeclRef = declRef.as<StructDecl>())
         {
@@ -5692,6 +5704,79 @@ GlobalGenericParamDecl* GenericParamTypeLayout::getGlobalGenericParamDecl()
     SLANG_ASSERT(declRefType);
     auto rsDeclRef = declRefType->getDeclRef().as<GlobalGenericParamDecl>();
     return rsDeclRef.getDecl();
+}
+
+DeclRefType* TypeLayoutContext::lookupExternDeclRefType(DeclRefType* declRefType)
+{
+    const auto declRef = declRefType->getDeclRef();
+    const auto decl = declRef.getDecl();
+    const auto isExtern =
+        decl->hasModifier<ExternAttribute>() || decl->hasModifier<ExternModifier>();
+    if (isExtern)
+    {
+        if (!externTypeMap)
+            buildExternTypeMap();
+        const auto mangledName = getMangledName(targetReq->getLinkage()->getASTBuilder(), decl);
+        externTypeMap->tryGetValue(mangledName, declRefType);
+    }
+    return declRefType;
+}
+
+void TypeLayoutContext::buildExternTypeMap()
+{
+    externTypeMap.emplace();
+    const auto linkage = targetReq->getLinkage();
+
+    HashSet<String> externNames;
+    Dictionary<String, DeclRefType*> allTypes;
+
+    // Traverse the AST and keep track of all extern names and all type definitions
+    // We'll match them up later
+    auto processDecl = [&](auto&& go, Decl* decl) -> void
+    {
+        const auto isExtern =
+            decl->hasModifier<ExternAttribute>() || decl->hasModifier<ExternModifier>();
+
+        if (auto declRefType = as<DeclRefType>(DeclRefType::create(astBuilder, decl)))
+        {
+            String mangledName = getMangledName(astBuilder, decl);
+
+            if (isExtern)
+            {
+                externNames.add(mangledName);
+            }
+            else
+            {
+                allTypes[mangledName] = declRefType;
+            }
+        }
+
+        if (auto scopeDecl = as<ScopeDecl>(decl))
+        {
+            for (auto member : scopeDecl->members)
+            {
+                go(go, member);
+            }
+        }
+    };
+
+    for (const auto& m : linkage->loadedModulesList)
+    {
+        const auto& ast = m->getModuleDecl();
+        for (auto member : ast->members)
+        {
+            processDecl(processDecl, member);
+        }
+    }
+
+    // Only keep the types that have matching extern declarations
+    for (const auto& externName : externNames)
+    {
+        if (allTypes.containsKey(externName))
+        {
+            externTypeMap.value()[externName] = allTypes[externName];
+        }
+    }
 }
 
 } // namespace Slang

@@ -405,8 +405,13 @@ SlangResult RendererBase::queryInterface(SlangUUID const& uuid, void** outObject
         return SLANG_OK;
     }
 
-    *outObject = getInterface(uuid);
-    return SLANG_OK;
+    if (IDevice* device_ptr = getInterface(uuid))
+    {
+        *outObject = device_ptr;
+        addRef();
+        return SLANG_OK;
+    }
+    return SLANG_E_NO_INTERFACE;
 }
 
 IDevice* gfx::RendererBase::getInterface(const Guid& guid)
@@ -770,6 +775,14 @@ Result RendererBase::getTextureRowAlignment(Size* outAlignment)
     return SLANG_E_NOT_AVAILABLE;
 }
 
+Result RendererBase::getCooperativeVectorProperties(
+    CooperativeVectorProperties* properties,
+    uint32_t* propertyCount)
+{
+    *propertyCount = 0;
+    return SLANG_E_NOT_AVAILABLE;
+}
+
 Result RendererBase::getShaderObjectLayout(
     slang::ISession* session,
     slang::TypeReflection* type,
@@ -1130,14 +1143,18 @@ Result ShaderProgramBase::compileShaders(RendererBase* device)
                     DebugMessageSource::Slang,
                     (char*)diagnostics->getBufferPointer());
             }
+            SLANG_RETURN_ON_FAIL(compileResult);
+
             kernelCodes.add(downstreamIR);
         }
 
-        // If target precompilation was used, kernelCode may only represent the
-        // glue code holding together the bits of precompiled target IR.
-        // Collect those dependency target IRs too.
+        // If target precompilation with deferred downstream linking is enabled,
+        // kernelCode may only represent the glue code holding together the
+        // bits of precompiled target IR. It's the application's job to pull it
+        // together. Collect those dependency target IRs too.
         ComPtr<slang::IModulePrecompileService_Experimental> componentPrecompileService;
-        if (entryPointComponent->queryInterface(
+        if (this->desc.downstreamLinkMode == DownstreamLinkMode::Deferred &&
+            entryPointComponent->queryInterface(
                 slang::IModulePrecompileService_Experimental::getTypeGuid(),
                 (void**)componentPrecompileService.writeRef()) == SLANG_OK)
         {

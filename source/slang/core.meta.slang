@@ -440,8 +440,8 @@ attribute_syntax [Differentiable(order:int = 0)] : BackwardDifferentiableAttribu
 __intrinsic_op($(kIROp_RequirePrelude))
 void __requirePrelude(constexpr String preludeText);
 
-__intrinsic_op($(kIROp_RequireGLSLExtension))
-void __requireGLSLExtension(constexpr String preludeText);
+__intrinsic_op($(kIROp_RequireTargetExtension))
+void __requireTargetExtension(constexpr String preludeText);
 
 /// @experimetal
 /// Perform a compile-time condition check and emit a compile-time error if the condition is false.
@@ -3710,6 +3710,13 @@ attribute_syntax [vk_location(location : int)] : GLSLLocationAttribute;
 __attributeTarget(VarDeclBase)
 attribute_syntax [vk_index(index : int)] : GLSLIndexAttribute;
 
+/// Declare offset for a struct field. Applies to all kinds of structs when targeting Vulkan.
+/// Applies only to structs that are directly used as interface blocks (such as push constants and uniforms)
+/// when targeting GLSL, as GLSL does not support the `offset` qualifier on regular structs.
+/// This attribute has no effect on other targets.
+__attributeTarget(VarDeclBase)
+attribute_syntax [vk_offset(index: int)] : VkStructOffsetAttribute;
+
 /// @deprecated
 /// Use `spirv_asm` instead for inline SPIR-V assembly.
 __attributeTarget(FuncDecl)
@@ -4213,4 +4220,7 @@ attribute_syntax [RequireFullQuads] : RequireFullQuadsAttribute;
 
 __generic<T>
 typealias NodePayloadPtr = Ptr<T, $( (uint64_t)AddressSpace::NodePayloadAMDX)>;
+
+__attributeTarget(StructDecl)
+attribute_syntax [raypayload] : RayPayloadAttribute;
 

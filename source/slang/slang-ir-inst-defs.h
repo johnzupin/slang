@@ -126,8 +126,8 @@ INST(Nop, nop, 0, 0)
             INST(OutType, Out, 1, HOISTABLE)
             INST(InOutType, InOut, 1, HOISTABLE)
         INST_RANGE(OutTypeBase, OutType, InOutType)
-        INST(HLSLConstBufferPointerType, ConstBufferPointerType, 2, HOISTABLE)
     INST_RANGE(PtrTypeBase, PtrType, InOutType)
+
 
     // A ComPtr<T> type is treated as a opaque type that represents a reference-counted handle to a COM object.
     INST(ComPtrType, ComPtr, 1, HOISTABLE)
@@ -235,6 +235,7 @@ INST(Nop, nop, 0, 0)
 INST(RayQueryType, RayQuery, 1, HOISTABLE)
 INST(HitObjectType, HitObject, 0, HOISTABLE)
 INST(CoopVectorType, CoopVectorType, 2, HOISTABLE)
+INST(CoopMatrixType, CoopMatrixType, 5, HOISTABLE)
 
 // Opaque type that can be dynamically cast to other resource types.
 INST(DynamicResourceType, DynamicResource, 0, HOISTABLE)
@@ -294,7 +295,7 @@ INST(GlobalConstant, globalConstant, 0, GLOBAL)
 
 INST(StructKey, key, 0, GLOBAL)
 INST(GlobalGenericParam, global_generic_param, 0, GLOBAL)
-INST(WitnessTable, witness_table, 0, 0)
+INST(WitnessTable, witness_table, 0, HOISTABLE)
 
 INST(IndexedFieldKey, indexedFieldKey, 2, HOISTABLE)
 
@@ -407,7 +408,7 @@ INST(WitnessTableEntry, witness_table_entry, 2, 0)
 INST(InterfaceRequirementEntry, interface_req_entry, 2, GLOBAL)
 
 // An inst to represent the workgroup size of the calling entry point.
-// We will materialize this inst during `translateGLSLGlobalVar`.
+// We will materialize this inst during `translateGlobalVaryingVar`.
 INST(GetWorkGroupSize, GetWorkGroupSize, 0, HOISTABLE)
 
 // An inst that returns the current stage of the calling entry point.
@@ -661,12 +662,14 @@ INST(MissingReturn, missingReturn, 0, 0)
 INST(Unreachable, unreachable, 0, 0)
 INST_RANGE(Unreachable, MissingReturn, Unreachable)
 
-INST_RANGE(TerminatorInst, Return, Unreachable)
+INST(Defer, defer, 3, 0)
+
+INST_RANGE(TerminatorInst, Return, Defer)
 
 INST(discard, discard, 0, 0)
 
 INST(RequirePrelude, RequirePrelude, 1, 0)
-INST(RequireGLSLExtension, RequireGLSLExtension, 1, 0)
+INST(RequireTargetExtension, RequireTargetExtension, 1, 0)
 INST(RequireComputeDerivative, RequireComputeDerivative, 0, 0)
 INST(StaticAssert, StaticAssert, 2, 0)
 INST(Printf, Printf, 1, 0)
@@ -717,6 +720,7 @@ INST(BitNot, bitnot, 1, 0)
 INST(Select, select, 3, 0)
 
 INST(CheckpointObject, checkpointObj, 1, 0)
+INST(LoopExitValue, loopExitValue, 1, 0)
 
 INST(GetStringHash, getStringHash, 1, 0)
 
@@ -812,6 +816,11 @@ INST_RANGE(BindingQuery, GetRegisterIndex, GetRegisterSpace)
     INST(InterpolationModeDecoration,       interpolationMode,      1, 0)
     INST(NameHintDecoration,                nameHint,               1, 0)
 
+    INST(PhysicalTypeDecoration,            PhysicalType,           1, 0)
+
+    // Mark an address instruction as aligned to a specific byte boundary.
+    INST(AlignedAddressDecoration,          AlignedAddressDecoration, 1, 0)
+
     // Marks a type as being used as binary interface (e.g. shader parameters).
     // This prevents the legalizeEmptyType() pass from eliminating it on C++/CUDA targets.
     INST(BinaryInterfaceTypeDecoration,     BinaryInterfaceType, 0, 0)
@@ -855,7 +864,7 @@ INST_RANGE(BindingQuery, GetRegisterIndex, GetRegisterSpace)
     INST(PatchConstantFuncDecoration,       patchConstantFunc,      1, 0)
     INST(MaxTessFactorDecoration,           maxTessFactor,          1, 0)
     INST(OutputControlPointsDecoration,     outputControlPoints,    1, 0)
-    INST(OutputTopologyDecoration,          outputTopology,         1, 0)
+    INST(OutputTopologyDecoration,          outputTopology,         2, 0)
     INST(PartitioningDecoration,            partioning,             1, 0)
     INST(DomainDecoration,                  domain,                 1, 0)
     INST(MaxVertexCountDecoration,          maxVertexCount,         1, 0)
@@ -999,6 +1008,7 @@ INST_RANGE(BindingQuery, GetRegisterIndex, GetRegisterSpace)
     INST(GlobalInputDecoration, input, 0, 0)
     INST(GLSLLocationDecoration, glslLocation, 1, 0)
     INST(GLSLOffsetDecoration, glslOffset, 1, 0)
+    INST(VkStructOffsetDecoration, vkStructOffset, 1, 0)
     INST(PayloadDecoration, payload, 0, 0)
     INST(RayPayloadDecoration, raypayload, 0, 0)
 
