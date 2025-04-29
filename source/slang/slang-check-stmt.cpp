@@ -119,9 +119,10 @@ void SemanticsStmtVisitor::checkStmt(Stmt* stmt)
 }
 
 template<typename T>
-T* SemanticsStmtVisitor::FindOuterStmt()
+T* SemanticsStmtVisitor::FindOuterStmt(Stmt* searchUntil)
 {
-    for (auto outerStmtInfo = m_outerStmts; outerStmtInfo; outerStmtInfo = outerStmtInfo->next)
+    for (auto outerStmtInfo = m_outerStmts; outerStmtInfo && outerStmtInfo->stmt != searchUntil;
+         outerStmtInfo = outerStmtInfo->next)
     {
         auto outerStmt = outerStmtInfo->stmt;
         auto found = as<T>(outerStmt);
@@ -148,47 +149,102 @@ Stmt* SemanticsStmtVisitor::findOuterStmtWithLabel(Name* label)
     return nullptr;
 }
 
+void SemanticsStmtVisitor::generateUniqueIDForStmt(BreakableStmt* stmt)
+{
+    stmt->uniqueID = getASTBuilder()->generateUniqueIDForStmt();
+}
+
 void SemanticsStmtVisitor::visitBreakStmt(BreakStmt* stmt)
 {
-    Stmt* targetStmt = nullptr;
+    // We need to identify the enclosing statement that
+    // this `break` is meant to break out of.
+    //
+    BreakableStmt* targetOuterStmt = nullptr;
     if (stmt->targetLabel.type == TokenType::Identifier)
     {
-        // This is a break statement with an explicit target label.
-        // Try to find the outer stmt with the label.
-        targetStmt = findOuterStmtWithLabel(stmt->targetLabel.getName());
-        if (!targetStmt)
+        // If this is a `break` statement that specifies
+        // an explicit label, then we will search for
+        // an outer statement matching that label.
+        //
+        auto foundOuterStmt = findOuterStmtWithLabel(stmt->targetLabel.getName());
+        if (!foundOuterStmt)
         {
             getSink()->diagnose(stmt, Diagnostics::breakLabelNotFound, stmt->targetLabel.getName());
         }
-        if (!as<BreakableStmt>(targetStmt))
+        else
         {
-            getSink()->diagnose(
-                stmt,
-                Diagnostics::targetLabelDoesNotMarkBreakableStmt,
-                stmt->targetLabel.getName());
+            // It is possible that the labelled statement
+            // is not a valid one for a `break` to target,
+            // so we check for that next.
+            //
+            targetOuterStmt = as<BreakableStmt>(foundOuterStmt);
+            if (!targetOuterStmt)
+            {
+                getSink()->diagnose(
+                    stmt,
+                    Diagnostics::targetLabelDoesNotMarkBreakableStmt,
+                    stmt->targetLabel.getName());
+            }
         }
     }
     else
     {
-        // For `break` statements without an explicit target,
-        // find the inner most breakable stmt.
-        targetStmt = FindOuterStmt<BreakableStmt>();
-        if (!targetStmt)
+        // If there is no explicit label on the `break` statement,
+        // then we are simply searching for the inner-most
+        // enclosing statement that is a valid `break` target.
+        //
+        targetOuterStmt = FindOuterStmt<BreakableStmt>();
+        if (!targetOuterStmt)
         {
             getSink()->diagnose(stmt, Diagnostics::breakOutsideLoop);
         }
     }
-    stmt->parentStmt = targetStmt;
+
+    // We do not (currently) allow a `break` to proceed "through"
+    // an enclosing `defer` statement. Thus, we search for
+    // a possible enclosing `defer` statement, between the
+    // `stmt` being checked and the `targetOuterStmt` that
+    // `stmt` is trying to branch to.
+    //
+    // TODO: This is a reasonable feature to add down the line;
+    // it simply involves more implementation complexity than
+    // the simpler cases of `defer`.
+    //
+    if (targetOuterStmt)
+    {
+        if (FindOuterStmt<DeferStmt>(targetOuterStmt))
+        {
+            getSink()->diagnose(stmt, Diagnostics::breakInsideDefer);
+        }
+
+        // We stash the ID of the target statement in the `break`
+        // statement so that they can be correlated later, during
+        // code generation.
+        //
+        stmt->targetOuterStmtID = targetOuterStmt->uniqueID;
+    }
 }
 
 void SemanticsStmtVisitor::visitContinueStmt(ContinueStmt* stmt)
 {
-    auto outer = FindOuterStmt<LoopStmt>();
-    if (!outer)
+    auto targetOuterStmt = FindOuterStmt<LoopStmt>();
+    if (!targetOuterStmt)
     {
         getSink()->diagnose(stmt, Diagnostics::continueOutsideLoop);
     }
-    stmt->parentStmt = outer;
+    else
+    {
+        if (FindOuterStmt<DeferStmt>(targetOuterStmt))
+        {
+            getSink()->diagnose(stmt, Diagnostics::continueInsideDefer);
+        }
+
+        // We stash the ID of the target statement in the `continue`
+        // statement so that they can be correlated later, during
+        // code generation.
+        //
+        stmt->targetOuterStmtID = targetOuterStmt->uniqueID;
+    }
 }
 
 Expr* SemanticsVisitor::checkPredicateExpr(Expr* expr)
@@ -205,6 +261,7 @@ Expr* SemanticsVisitor::checkPredicateExpr(Expr* expr)
 
 void SemanticsStmtVisitor::visitDoWhileStmt(DoWhileStmt* stmt)
 {
+    generateUniqueIDForStmt(stmt);
     checkModifiers(stmt);
     WithOuterStmt subContext(this, stmt);
 
@@ -215,6 +272,7 @@ void SemanticsStmtVisitor::visitDoWhileStmt(DoWhileStmt* stmt)
 
 void SemanticsStmtVisitor::visitForStmt(ForStmt* stmt)
 {
+    generateUniqueIDForStmt(stmt);
     WithOuterStmt subContext(this, stmt);
     checkModifiers(stmt);
     checkStmt(stmt->initialStatement);
@@ -328,6 +386,7 @@ void SemanticsStmtVisitor::validateCaseStmts(SwitchStmt* stmt, DiagnosticSink* s
 
 void SemanticsStmtVisitor::visitSwitchStmt(SwitchStmt* stmt)
 {
+    generateUniqueIDForStmt(stmt);
     WithOuterStmt subContext(this, stmt);
 
     // TODO(tfoley): need to coerce condition to an integral type...
@@ -358,11 +417,20 @@ void SemanticsStmtVisitor::visitCaseStmt(CaseStmt* stmt)
 
     stmt->expr = expr;
     stmt->exprVal = exprVal;
-    stmt->parentStmt = switchStmt;
+
+    if (switchStmt)
+    {
+        // We stash the ID of the target statement in the `case`
+        // statement so that they can be correlated later, during
+        // code generation.
+        //
+        stmt->targetOuterStmtID = switchStmt->uniqueID;
+    }
 }
 
 void SemanticsStmtVisitor::visitTargetSwitchStmt(TargetSwitchStmt* stmt)
 {
+    generateUniqueIDForStmt(stmt);
     WithOuterStmt subContext(this, stmt);
     HashSet<Stmt*> checkedStmt;
     for (auto caseStmt : stmt->targetCases)
@@ -422,6 +490,10 @@ void SemanticsStmtVisitor::visitTargetCaseStmt(TargetCaseStmt* stmt)
     {
         getSink()->diagnose(stmt, Diagnostics::caseOutsideSwitch);
     }
+    else
+    {
+        stmt->targetOuterStmtID = switchStmt->uniqueID;
+    }
     WithOuterStmt subContext(this, stmt);
     subContext.checkStmt(stmt->body);
 }
@@ -440,7 +512,14 @@ void SemanticsStmtVisitor::visitDefaultStmt(DefaultStmt* stmt)
     {
         getSink()->diagnose(stmt, Diagnostics::defaultOutsideSwitch);
     }
-    stmt->parentStmt = switchStmt;
+    else
+    {
+        // We stash the ID of the target statement in the `case`
+        // statement so that they can be correlated later, during
+        // code generation.
+        //
+        stmt->targetOuterStmtID = switchStmt->uniqueID;
+    }
 }
 
 void SemanticsStmtVisitor::visitIfStmt(IfStmt* stmt)
@@ -497,15 +576,27 @@ void SemanticsStmtVisitor::visitReturnStmt(ReturnStmt* stmt)
             }
         }
     }
+
+    if (FindOuterStmt<DeferStmt>())
+    {
+        getSink()->diagnose(stmt, Diagnostics::returnInsideDefer);
+    }
 }
 
 void SemanticsStmtVisitor::visitWhileStmt(WhileStmt* stmt)
 {
+    generateUniqueIDForStmt(stmt);
     checkModifiers(stmt);
     WithOuterStmt subContext(this, stmt);
     stmt->predicate = checkPredicateExpr(stmt->predicate);
     subContext.checkStmt(stmt->statement);
     checkLoopInDifferentiableFunc(stmt);
+}
+
+void SemanticsStmtVisitor::visitDeferStmt(DeferStmt* stmt)
+{
+    WithOuterStmt subContext(this, stmt);
+    subContext.checkStmt(stmt->statement);
 }
 
 void SemanticsStmtVisitor::visitExpressionStmt(ExpressionStmt* stmt)
@@ -789,7 +880,7 @@ void SemanticsStmtVisitor::tryInferLoopMaxIterations(ForStmt* stmt)
     // if the loop body modifies the induction variable.
     //
     auto maxItersAttr = m_astBuilder->create<InferredMaxItersAttribute>();
-    auto litExpr = m_astBuilder->create<LiteralExpr>();
+    auto litExpr = m_astBuilder->create<IntegerLiteralExpr>();
     litExpr->type.type = m_astBuilder->getIntType();
     litExpr->token.setName(getNamePool()->getName(String(iterations)));
     maxItersAttr->args.add(litExpr);

@@ -96,6 +96,8 @@ public typealias dmat4x4 = matrix<double, 4, 4>;
 
 public out float4 gl_Position : SV_Position;
 public out float gl_PointSize : SV_PointSize;
+public in float2 gl_PointCoord : SV_PointCoord;
+
 public in vec4 gl_FragCoord : SV_Position;
 public out float gl_FragDepth : SV_Depth;
 public out int gl_FragStencilRef : SV_StencilRef;
@@ -320,6 +322,17 @@ public bool operator!=<let N:int>(vector<$(typeName), N> left, vector<$(typeName
 ${{{{
 }
 }}}}
+
+/// Array length
+__generic<T, let N : int>
+public extension Array<T, N>
+{
+    [ForceInline]
+    public int length()
+    {
+        return this.getCount();
+    }
+}
 
 //
 // Section 8.1. Angle and Trigonometry Functions
@@ -617,230 +630,34 @@ public vector<float, N> uintBitsToFloat(highp vector<uint, N> x)
 
 [__readNone]
 [ForceInline]
-uint packUnorm1x16(float c)
-{
-    return uint(round(clamp(c, 0.0, 1.0) * 65535.0));
-}
-
-[__readNone]
-[ForceInline]
-uint packSnorm1x16(float v)
-{
-    return uint(round(clamp(v ,-1.0, 1.0) * 32767.0));
-}
-
-[__readNone]
-[ForceInline]
-uint packUnorm1x8(float c)
-{
-    return uint(round(clamp(c, 0.0, 1.0) * 255.0));
-}
-
-[__readNone]
-[ForceInline]
-uint packSnorm1x8(float c)
-{
-    return uint(round(clamp(c, -1.0, 1.0) * 127.0));
-}
-
-[__readNone]
-[ForceInline]
-float unpackUnorm1x16(uint p)
-{
-    const uint wordMask = 0xffff;
-    return float(p & wordMask) / 65535.0;
-}
-
-[__readNone]
-[ForceInline]
-float unpackSnorm1x16(uint p)
-{
-    const uint wordMask = 0xffff;
-    return clamp(float(p & wordMask) / 32767.0, -1.0, 1.0);
-}
-
-[__readNone]
-[ForceInline]
-float unpackUnorm1x8(uint p)
-{
-    const uint byteMask = 0xff;
-    return float(p & byteMask) / 255.0;
-}
-
-[__readNone]
-[ForceInline]
-float unpackSnorm1x8(uint p)
-{
-    const uint byteMask = 0xff;
-    return clamp(float(p & byteMask) / 127.0, -1.0, 1.0);
-}
-
-[__readNone]
-[ForceInline]
-[require(cpp_cuda_glsl_hlsl_spirv, shader5_sm_4_0)]
-uint float2half(float f)
-{
-    uint u = floatBitsToUint(f);
-    uint s = ((u >> uint(16)) & uint(0x8000));
-    uint e = 0;
-    uint m = ((u >> uint(13)) & uint(0x03ff));
-    if (m != 0)
-    {
-        e = ((((u & uint(0x7f800000)) - uint(0x38000000)) >> uint(13)) & uint(0x7c00));
-    }
-    return (s | e | m);
-}
-
-[__readNone]
-[ForceInline]
-[require(cpp_cuda_glsl_hlsl_spirv, shader5_sm_4_0)]
-public uint packUnorm2x16(vec2 v)
-{
-    __target_switch
-    {
-    case glsl: __intrinsic_asm "packUnorm2x16";
-    case spirv: return spirv_asm {
-        result:$$uint = OpExtInst glsl450 PackUnorm2x16 $v
-    };
-    default:
-        return packUnorm1x16(v.x) | (packUnorm1x16(v.y) << uint(16));
-    }
-}
-
-[__readNone]
-[ForceInline]
-[require(cpp_cuda_glsl_hlsl_spirv, shader5_sm_4_0)]
-public uint packSnorm2x16(vec2 v)
-{
-    __target_switch
-    {
-    case glsl: __intrinsic_asm "packSnorm2x16";
-    case spirv: return spirv_asm {
-        result:$$uint = OpExtInst glsl450 PackSnorm2x16 $v
-    };
-    default:
-        return packSnorm1x16(v.x) | (packSnorm1x16(v.y) << uint(16));
-    }
-}
-
-[__readNone]
-[ForceInline]
-[require(cpp_cuda_glsl_hlsl_spirv, shader5_sm_4_0)]
-public uint packUnorm4x8(vec4 v)
-{
-    __target_switch
-    {
-    case glsl: __intrinsic_asm "packUnorm4x8";
-    case spirv: return spirv_asm {
-        result:$$uint = OpExtInst glsl450 PackUnorm4x8 $v
-    };
-    default:
-        return packUnorm1x8(v.x) | (packUnorm1x8(v.y) << uint(8)) | (packUnorm1x8(v.z) << uint(16)) | (packUnorm1x8(v.w) << uint(24));
-    }
-}
-
-[__readNone]
-[ForceInline]
-[require(cpp_cuda_glsl_hlsl_spirv, shader5_sm_4_0)]
-public uint packSnorm4x8(vec4 v)
-{
-    __target_switch
-    {
-    case glsl: __intrinsic_asm "packSnorm4x8";
-    case spirv: return spirv_asm {
-        result:$$uint = OpExtInst glsl450 PackSnorm4x8 $v
-    };
-    default:
-        return packSnorm1x8(v.x) | (packSnorm1x8(v.y) << uint(8)) | (packSnorm1x8(v.z) << uint(16)) | (packSnorm1x8(v.w) << uint(24));
-    }
-}
-
-[__readNone]
-[ForceInline]
-[require(cpp_cuda_glsl_hlsl_spirv, shader5_sm_4_0)]
+[require(cpp_cuda_glsl_hlsl_metal_spirv_wgsl, pack_vector)]
 public vec2 unpackUnorm2x16(uint p)
 {
-    __target_switch
-    {
-    case glsl: __intrinsic_asm "unpackUnorm2x16";
-    case spirv: return spirv_asm {
-        result:$$vec2 = OpExtInst glsl450 UnpackUnorm2x16 $p
-    };
-    default:
-        return vec2(unpackUnorm1x16(p & uint(0xffff)), unpackUnorm1x16(p >> uint(16)));
-    }
+    return unpackUnorm2x16ToFloat(p);
 }
 
 [__readNone]
 [ForceInline]
-[require(cpp_cuda_glsl_hlsl_spirv, shader5_sm_4_0)]
+[require(cpp_cuda_glsl_hlsl_metal_spirv_wgsl, pack_vector)]
 public vec2 unpackSnorm2x16(uint p)
 {
-    __target_switch
-    {
-    case glsl: __intrinsic_asm "unpackSnorm2x16";
-    case spirv: return spirv_asm {
-        result:$$vec2 = OpExtInst glsl450 UnpackSnorm2x16 $p
-    };
-    default:
-        return vec2(unpackSnorm1x16(p & uint(0xffff)), unpackSnorm1x16(p >> uint(16)));
-    }
+    return unpackSnorm2x16ToFloat(p);
 }
 
 [__readNone]
 [ForceInline]
-[require(cpp_cuda_glsl_hlsl_spirv, shader5_sm_4_0)]
+[require(cpp_cuda_glsl_hlsl_metal_spirv_wgsl, pack_vector)]
 public vec4 unpackUnorm4x8(highp uint p)
 {
-    __target_switch
-    {
-    case glsl: __intrinsic_asm "unpackUnorm4x8";
-    case spirv: return spirv_asm {
-        result:$$vec4 = OpExtInst glsl450 UnpackUnorm4x8 $p
-    };
-    default:
-        return vec4(
-            unpackUnorm1x8(p),
-            unpackUnorm1x8(p >> 8),
-            unpackUnorm1x8(p >> 16),
-            unpackUnorm1x8(p >> 24));
-    }
+    return unpackUnorm4x8ToFloat(p);
 }
 
 [__readNone]
 [ForceInline]
-[require(cpp_cuda_glsl_hlsl_spirv, shader5_sm_4_0)]
+[require(cpp_cuda_glsl_hlsl_metal_spirv_wgsl, pack_vector)]
 public vec4 unpackSnorm4x8(highp uint p)
 {
-    __target_switch
-    {
-    case glsl: __intrinsic_asm "unpackSnorm4x8";
-    case spirv: return spirv_asm {
-        result:$$vec4 = OpExtInst glsl450 UnpackSnorm4x8 $p
-    };
-    default:
-        return vec4(
-            unpackSnorm1x8(p),
-            unpackSnorm1x8(p >> 8),
-            unpackSnorm1x8(p >> 16),
-            unpackSnorm1x8(p >> 24));
-    }
-}
-
-[__readNone]
-[ForceInline]
-[require(cpp_cuda_glsl_hlsl_spirv, shader5_sm_4_0)]
-public uint packHalf2x16(vec2 v)
-{
-    __target_switch
-    {
-    case glsl: __intrinsic_asm "packHalf2x16";
-    case spirv: return spirv_asm {
-        result:$$uint = OpExtInst glsl450 PackHalf2x16 $v
-    };
-    default:
-        return float2half(v.x) | (float2half(v.y) << uint(16));
-    }
+    return unpackSnorm4x8ToFloat(p);
 }
 
 [__readNone]
@@ -865,18 +682,10 @@ public float half2float(uint h)
 
 [__readNone]
 [ForceInline]
-[require(cpp_cuda_glsl_hlsl_spirv, shader5_sm_4_0)]
+[require(cpp_cuda_glsl_hlsl_metal_spirv_wgsl, pack_vector)]
 public vec2 unpackHalf2x16(uint p)
 {
-    __target_switch
-    {
-    case glsl: __intrinsic_asm "unpackHalf2x16";
-    case spirv: return spirv_asm {
-        result:$$vec2 = OpExtInst glsl450 UnpackHalf2x16 $p
-    };
-    default:
-        return vec2(half2float(p & uint(0xffff)), half2float(p >> uint(16)));
-    }
+    return unpackHalf2x16ToFloat(p);
 }
 
 [__readNone]
@@ -4296,7 +4105,7 @@ __generic<T : __BuiltinType>
     case glsl:
     {
         if (__type_equals<T, float>())
-            __requireGLSLExtension("GL_EXT_shader_atomic_float");
+            __requireTargetExtension("GL_EXT_shader_atomic_float");
     }
     case spirv:
         if (__type_equals<T, float>())
@@ -4318,7 +4127,7 @@ __generic<T : __BuiltinType>
     case glsl:
     {
         if (__type_equals<T, float>())
-            __requireGLSLExtension("GL_EXT_shader_atomic_float2");
+            __requireTargetExtension("GL_EXT_shader_atomic_float2");
     }
     case spirv:
         if (__type_equals<T, float>())
@@ -4758,7 +4567,7 @@ void requireGLSLExtForRayTracingBuiltin()
     __target_switch
     {
     case glsl:
-        __requireGLSLExtension("GL_EXT_ray_tracing");
+        __requireTargetExtension("GL_EXT_ray_tracing");
         __intrinsic_asm "";
     default:
         return;
@@ -6301,45 +6110,6 @@ public void traceRayMotionNV(
     }
 }
 
-__generic<T : __BuiltinType>
-[ForceInline]
-void typeRequireChecks_shader_subgroup_GLSL() {
-    // the following is a seperate function call, since else the `__requireGLSLExtension` and associated __intrinsic_asm is ignored if the calling function also calls an __intrinsic_asm
-    __target_switch
-    {
-    case glsl:
-        if (__type_equals<T, half>()
-            || __type_equals<T, float16_t>()
-            ) __requireGLSLExtension("GL_EXT_shader_subgroup_extended_types_float16");
-        else if (__type_equals<T, uint8_t>()
-            || __type_equals<T, int8_t>()
-            ) __requireGLSLExtension("GL_EXT_shader_subgroup_extended_types_int8");
-        else if (__type_equals<T, uint16_t>()
-            || __type_equals<T, int16_t>()
-            ) __requireGLSLExtension("GL_EXT_shader_subgroup_extended_types_int16");
-        else if (__type_equals<T, uint64_t>()
-            || __type_equals<T, int64_t>()
-            ) __requireGLSLExtension("GL_EXT_shader_subgroup_extended_types_int64");
-
-        __intrinsic_asm "";
-    }
-}
-
-__generic<T : __BuiltinType>
-void shader_subgroup_preamble() {
-    // checks needed for shader_subgroup functions; __requireGLSLExtension does not work 
-    // (does not add the ext specified correctly to the compile output; using extended type
-    // will result in error for using the type)
-    __target_switch
-    {
-    case glsl:
-        typeRequireChecks_shader_subgroup_GLSL<T>();
-    default:
-        return;
-    }
-
-} 
-
 // GL_KHR_shader_subgroup_basic Built-in Variables
 
 [require(cpp_cuda_glsl_hlsl_spirv_wgsl, subgroup_basic)]
@@ -6347,14 +6117,14 @@ void requireGLSLExtForSubgroupBasicBuiltin() {
     __target_switch
     {
     case glsl:
-        __requireGLSLExtension("GL_KHR_shader_subgroup_basic");
+        __requireTargetExtension("GL_KHR_shader_subgroup_basic");
         __intrinsic_asm "";
     default:
         return;
     }
 }
 
-[require(cpp_cuda_glsl_hlsl_spirv_wgsl, subgroup_basic)]
+[require(cpp_cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_basic)]
 void setupExtForSubgroupBasicBuiltIn() {
     __target_switch
     {
@@ -6371,7 +6141,7 @@ void requireGLSLExtForSubgroupBallotBuiltin() {
     __target_switch
     {
     case glsl:
-        __requireGLSLExtension("GL_KHR_shader_subgroup_ballot");
+        __requireTargetExtension("GL_KHR_shader_subgroup_ballot");
         __intrinsic_asm "";
     default:
         return;
@@ -6429,7 +6199,8 @@ public property uint gl_SubgroupID
 
 public property uint gl_SubgroupSize
 {
-    [require(cpp_cuda_glsl_hlsl_spirv_wgsl, subgroup_basic)]
+    [ForceInline]
+    [require(cpp_cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_basic)]
     get {
         setupExtForSubgroupBasicBuiltIn();
         return WaveGetLaneCount();
@@ -6438,7 +6209,8 @@ public property uint gl_SubgroupSize
 
 public property uint gl_SubgroupInvocationID
 {
-    [require(cpp_cuda_glsl_hlsl_spirv_wgsl, subgroup_basic)]
+    [ForceInline]
+    [require(cpp_cuda_glsl_hlsl_metal_spirv_wgsl, subgroup_basic)]
     get {
         setupExtForSubgroupBasicBuiltIn();
         return WaveGetLaneIndex();
@@ -8291,7 +8063,7 @@ __generic<T : __BuiltinType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_quad)
 [ForceInline]
-[require(glsl_hlsl_spirv_wgsl, subgroup_quad)]
+[require(glsl_hlsl_metal_spirv_wgsl, subgroup_quad)]
 public T subgroupQuadSwapHorizontal(T value)
 {
     shader_subgroup_preamble<T>();
@@ -8302,7 +8074,7 @@ __generic<T : __BuiltinType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_quad)
 [ForceInline]
-[require(glsl_hlsl_spirv_wgsl, subgroup_quad)]
+[require(glsl_hlsl_metal_spirv_wgsl, subgroup_quad)]
 public T subgroupQuadSwapVertical(T value)
 {
     shader_subgroup_preamble<T>();
@@ -8313,7 +8085,7 @@ __generic<T : __BuiltinType>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_quad)
 [ForceInline]
-[require(glsl_hlsl_spirv_wgsl, subgroup_quad)]
+[require(glsl_hlsl_metal_spirv_wgsl, subgroup_quad)]
 public T subgroupQuadSwapDiagonal(T value)
 {
     shader_subgroup_preamble<T>();
@@ -8336,7 +8108,7 @@ __generic<T : __BuiltinType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_quad)
 [ForceInline]
-[require(glsl_hlsl_spirv_wgsl, subgroup_quad)]
+[require(glsl_hlsl_metal_spirv_wgsl, subgroup_quad)]
 public vector<T,N> subgroupQuadSwapHorizontal(vector<T,N> value)
 {
     shader_subgroup_preamble<T>();
@@ -8347,7 +8119,7 @@ __generic<T : __BuiltinType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_quad)
 [ForceInline]
-[require(glsl_hlsl_spirv_wgsl, subgroup_quad)]
+[require(glsl_hlsl_metal_spirv_wgsl, subgroup_quad)]
 public vector<T,N> subgroupQuadSwapVertical(vector<T,N> value)
 {
     shader_subgroup_preamble<T>();
@@ -8358,11 +8130,42 @@ __generic<T : __BuiltinType, let N : int>
 __spirv_version(1.3)
 __glsl_extension(GL_KHR_shader_subgroup_quad)
 [ForceInline]
-[require(glsl_hlsl_spirv_wgsl, subgroup_quad)]
+[require(glsl_hlsl_metal_spirv_wgsl, subgroup_quad)]
 public vector<T,N> subgroupQuadSwapDiagonal(vector<T,N> value)
 {
     shader_subgroup_preamble<T>();
     return QuadReadAcrossDiagonal(value);
+}
+
+// GL_KHR_shader_subgroup_rotate
+
+__generic<T : __BuiltinType>
+[require(glsl_metal_spirv, subgroup_rotate)]
+public T subgroupRotate(T value, uint delta)
+{
+    return WaveRotate(value, delta);
+}
+
+__generic<T : __BuiltinType, let N : int>
+[require(glsl_metal_spirv, subgroup_rotate)]
+public vector<T, N> subgroupRotate(vector<T, N> value, uint delta)
+{
+    return WaveRotate(value, delta);
+}
+
+__generic<T : __BuiltinType>
+[require(glsl_spirv, subgroup_rotate)]
+public T subgroupClusteredRotate(T value, uint delta, constexpr uint clusterSize)
+{
+    return WaveClusteredRotate(value, delta, clusterSize);
+
+}
+
+__generic<T : __BuiltinType, let N : int>
+[require(glsl_spirv, subgroup_rotate)]
+public vector<T, N> subgroupClusteredRotate(vector<T, N> value, uint delta, constexpr uint clusterSize)
+{
+    return WaveClusteredRotate(value, delta, clusterSize);
 }
 
 //// GLSL atomic
@@ -8388,8 +8191,8 @@ void typeRequireChecks_atomic_using_float0_tier()
     {
     case glsl:
     {
-        if (__type_equals<T, uint64_t>() || __type_equals<T, int64_t>()) 
-            __requireGLSLExtension("GL_EXT_shader_atomic_int64");  
+        if (__type_equals<T, uint64_t>() || __type_equals<T, int64_t>())
+            __requireTargetExtension("GL_EXT_shader_atomic_int64");
     }
     case spirv:
         return; 
@@ -8405,16 +8208,16 @@ void typeRequireChecks_atomic_using_float1_tier()
     case glsl:
     {
         if (__type_equals<T, float>()) 
-            __requireGLSLExtension("GL_EXT_shader_atomic_float");
+            __requireTargetExtension("GL_EXT_shader_atomic_float");
         else if (__type_equals<T, half>() || __type_equals<T, float16_t>())
         {
-            __requireGLSLExtension("GL_EXT_shader_atomic_float2");
-            __requireGLSLExtension("GL_EXT_shader_explicit_arithmetic_types");
+            __requireTargetExtension("GL_EXT_shader_atomic_float2");
+            __requireTargetExtension("GL_EXT_shader_explicit_arithmetic_types");
         }
         else if (__type_equals<T, double>()) 
-            __requireGLSLExtension("GL_EXT_shader_atomic_float");
+            __requireTargetExtension("GL_EXT_shader_atomic_float");
         else if (__type_equals<T, uint64_t>() || __type_equals<T, int64_t>())
-            __requireGLSLExtension("GL_EXT_shader_atomic_int64");
+            __requireTargetExtension("GL_EXT_shader_atomic_int64");
     }
     case spirv:
         return;
@@ -8430,16 +8233,16 @@ void typeRequireChecks_atomic_using_float2_tier()
     case glsl:
     {    
         if (__type_equals<T, float>()) 
-            __requireGLSLExtension("GL_EXT_shader_atomic_float2");
+            __requireTargetExtension("GL_EXT_shader_atomic_float2");
         else if (__type_equals<T, half>() || __type_equals<T, float16_t>())
         {
-            __requireGLSLExtension("GL_EXT_shader_atomic_float2");
-            __requireGLSLExtension("GL_EXT_shader_explicit_arithmetic_types");
+            __requireTargetExtension("GL_EXT_shader_atomic_float2");
+            __requireTargetExtension("GL_EXT_shader_explicit_arithmetic_types");
         }
         else if (__type_equals<T, double>()) 
-            __requireGLSLExtension("GL_EXT_shader_atomic_float2");
-        else if (__type_equals<T, uint64_t>() || __type_equals<T, int64_t>()) 
-             __requireGLSLExtension("GL_EXT_shader_atomic_int64");        
+            __requireTargetExtension("GL_EXT_shader_atomic_float2");
+        else if (__type_equals<T, uint64_t>() || __type_equals<T, int64_t>())
+             __requireTargetExtension("GL_EXT_shader_atomic_int64");
     }
     case spirv: 
         return; 
@@ -9603,4 +9406,9 @@ __intrinsic_op($(kIROp_NonUniformResourceIndex))
 [require(cpp_cuda_glsl_hlsl_spirv, nonuniformqualifier)]
 public T nonuniformEXT(T index);
 
-
+/// Debug output printing
+[ForceInline]
+public void debugPrintfEXT<each T>(NativeString format, expand each T args)
+{
+    printf(format, args);
+}

@@ -45,13 +45,7 @@ function(generator dir)
     endif()
 endfunction()
 
-generator(
-    slang-cpp-extractor
-    USE_FEWER_WARNINGS
-    LINK_WITH_PRIVATE
-    compiler-core
-    slang-cpp-parser
-)
+generator(slang-fiddle LINK_WITH_PRIVATE compiler-core)
 generator(slang-embed)
 generator(slang-generate USE_FEWER_WARNINGS)
 generator(slang-lookup-generator LINK_WITH_PRIVATE compiler-core)
@@ -62,6 +56,8 @@ generator(
     TARGET_NAME
     slang-bootstrap
     USE_FEWER_WARNINGS
+    EXTRA_COMPILE_DEFINITIONS_PRIVATE
+    SLANG_BOOTSTRAP=1
     LINK_WITH_PUBLIC
     slang-without-embedded-core-module
     LINK_WITH_PRIVATE
@@ -92,7 +88,7 @@ if(SLANG_ENABLE_SLANGD)
             core
             compiler-core
             slang
-            slang-reflect-headers
+            slang-fiddle-output
             slang-capability-defs
             Threads::Threads
         INSTALL
@@ -156,29 +152,35 @@ if(SLANG_ENABLE_GFX)
             ${slang_SOURCE_DIR}
             ${slang_SOURCE_DIR}/include
         INCLUDE_DIRECTORIES_PRIVATE ${NVAPI_INCLUDE_DIRS}
-        REQUIRES copy-gfx-slang-modules
         INSTALL
         EXPORT_SET_NAME SlangTargets
         FOLDER gfx
     )
-    set(modules_dest_dir $<TARGET_FILE_DIR:slang-test>)
-    add_custom_target(
-        copy-gfx-slang-modules
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${modules_dest_dir}
-        COMMAND
-            ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_LIST_DIR}/gfx/gfx.slang
-            ${modules_dest_dir}/gfx.slang
-        COMMAND
-            ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_LIST_DIR}/gfx/slang.slang
-            ${modules_dest_dir}/slang.slang
-        WORKING_DIRECTORY ${slang_SOURCE_DIR}
-        VERBATIM
-    )
-    set_target_properties(copy-gfx-slang-modules PROPERTIES FOLDER generators)
-    install(
-        FILES ${modules_dest_dir}/gfx.slang ${modules_dest_dir}/slang.slang
-        DESTINATION ${runtime_subdir}
-    )
+    if(SLANG_ENABLE_TESTS)
+        set(modules_dest_dir $<TARGET_FILE_DIR:slang-test>)
+        add_custom_target(
+            copy-gfx-slang-modules
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${modules_dest_dir}
+            COMMAND
+                ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_LIST_DIR}/gfx/gfx.slang
+                ${modules_dest_dir}/gfx.slang
+            COMMAND
+                ${CMAKE_COMMAND} -E copy
+                ${CMAKE_CURRENT_LIST_DIR}/gfx/slang.slang
+                ${modules_dest_dir}/slang.slang
+            WORKING_DIRECTORY ${slang_SOURCE_DIR}
+            VERBATIM
+        )
+        set_target_properties(
+            copy-gfx-slang-modules
+            PROPERTIES FOLDER generators
+        )
+        install(
+            FILES ${modules_dest_dir}/gfx.slang ${modules_dest_dir}/slang.slang
+            DESTINATION ${runtime_subdir}
+        )
+        add_dependencies(gfx copy-gfx-slang-modules)
+    endif()
 
     slang_add_target(
         gfx-util

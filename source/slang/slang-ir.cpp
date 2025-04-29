@@ -596,6 +596,13 @@ static IRBlock::SuccessorList getSuccessors(IRInst* terminator)
         end = operands + terminator->getOperandCount() + 1;
         stride = 2;
         break;
+
+    case kIROp_Defer:
+        // defer <deferBlock> <mergeBlock> <scopeEndBlock>
+        begin = operands + 0;
+        end = begin + 1;
+        break;
+
     default:
         SLANG_UNEXPECTED("unhandled terminator instruction");
         UNREACHABLE_RETURN(IRBlock::SuccessorList(nullptr, nullptr));
@@ -869,6 +876,7 @@ bool isTerminatorInst(IROp op)
     case kIROp_Switch:
     case kIROp_Unreachable:
     case kIROp_MissingReturn:
+    case kIROp_Defer:
         return true;
     }
 }
@@ -1692,7 +1700,9 @@ void addHoistableInst(IRBuilder* builder, IRInst* inst)
     // any parameters of the parent.
     //
     while (insertBeforeInst && insertBeforeInst->getOp() == kIROp_Param)
+    {
         insertBeforeInst = insertBeforeInst->getNextInst();
+    }
 
     // For instructions that will be placed at module scope,
     // we don't care about relative ordering, but for everything
@@ -2490,6 +2500,72 @@ static void canonicalizeInstOperands(IRBuilder& builder, IROp op, ArrayView<IRIn
     }
 }
 
+static void addGlobalValue(IRBuilder* builder, IRInst* value)
+{
+    // If the value is already in the parent, keep it as-is.
+    // Because when the inst is Hoistable, the parent can have
+    // only one instance of the inst. The order among
+    // siblings should remain because the later siblings may
+    // have dependency to the earlier siblings.
+    //
+    if (value->parent)
+    {
+        SLANG_ASSERT(getIROpInfo(value->getOp()).isHoistable());
+        return;
+    }
+
+    // Try to find a suitable parent for the
+    // global value we are emitting.
+    //
+    // We will start out search at the current
+    // parent instruction for the builder, and
+    // possibly work our way up.
+    //
+    auto defaultInsertLoc = builder->getInsertLoc();
+    auto defaultParent = defaultInsertLoc.getParent();
+    auto parent = defaultParent;
+    while (parent)
+    {
+        // Inserting into the top level of a module?
+        // That is fine, and we can stop searching.
+        if (as<IRModuleInst>(parent))
+            break;
+
+        // Inserting into a basic block inside of
+        // a generic? That is okay too.
+        if (auto block = as<IRBlock>(parent))
+        {
+            if (as<IRGeneric>(block->parent))
+                break;
+        }
+
+        // Otherwise, move up the chain.
+        parent = parent->parent;
+    }
+
+    // If we somehow ran out of parents (possibly
+    // because an instruction wasn't linked into
+    // the full hierarchy yet), then we will
+    // fall back to inserting into the overall module.
+    if (!parent)
+    {
+        parent = builder->getModule()->getModuleInst();
+    }
+
+    // If it turns out that we are inserting into the
+    // current "insert into" parent for the builder, then
+    // we need to respect its "insert before" setting
+    // as well.
+    if (parent == defaultParent)
+    {
+        value->insertAt(defaultInsertLoc);
+    }
+    else
+    {
+        value->insertAtEnd(parent);
+    }
+}
+
 IRInst* IRBuilder::_findOrEmitHoistableInst(
     IRType* type,
     IROp op,
@@ -2613,7 +2689,16 @@ IRInst* IRBuilder::_findOrEmitHoistableInst(
         }
     }
 
-    addHoistableInst(this, inst);
+    // When an hoistable inst is already a child, skip adding it.
+    if (inst->parent == nullptr)
+    {
+        // In order to de-duplicate them, Witness-table is marked as Hoistable.
+        // But it is not exactly a hoistable type and it should be added as a global value.
+        if (inst->getOp() == kIROp_WitnessTable)
+            addGlobalValue(this, inst);
+        else
+            addHoistableInst(this, inst);
+    }
 
     return inst;
 }
@@ -2925,10 +3010,22 @@ IRComPtrType* IRBuilder::getComPtrType(IRType* valueType)
     return (IRComPtrType*)getType(kIROp_ComPtrType, valueType);
 }
 
-IRArrayTypeBase* IRBuilder::getArrayTypeBase(IROp op, IRType* elementType, IRInst* elementCount)
+IRArrayTypeBase* IRBuilder::getArrayTypeBase(
+    IROp op,
+    IRType* elementType,
+    IRInst* elementCount,
+    IRInst* stride)
 {
-    IRInst* operands[] = {elementType, elementCount};
-    return (IRArrayTypeBase*)getType(op, op == kIROp_ArrayType ? 2 : 1, operands);
+    if (op == kIROp_ArrayType)
+    {
+        IRInst* operands[] = {elementType, elementCount, stride};
+        return (IRArrayTypeBase*)getType(op, stride ? 3 : 2, operands);
+    }
+    else
+    {
+        IRInst* operands[] = {elementType, stride};
+        return (IRArrayTypeBase*)getType(op, stride ? 2 : 1, operands);
+    }
 }
 
 IRArrayType* IRBuilder::getArrayType(IRType* elementType, IRInst* elementCount)
@@ -3814,8 +3911,6 @@ IRInst* IRBuilder::emitDefaultConstruct(IRType* type, bool fallback)
     case kIROp_UIntType:
     case kIROp_UIntPtrType:
     case kIROp_UInt64Type:
-    case kIROp_Int8x4PackedType:
-    case kIROp_UInt8x4PackedType:
     case kIROp_CharType:
         return getIntValue(type, 0);
     case kIROp_BoolType:
@@ -4571,60 +4666,6 @@ IRDominatorTree* IRModule::findOrCreateDominatorTree(IRGlobalValueWithCode* func
     return analysis->getDominatorTree();
 }
 
-void addGlobalValue(IRBuilder* builder, IRInst* value)
-{
-    // Try to find a suitable parent for the
-    // global value we are emitting.
-    //
-    // We will start out search at the current
-    // parent instruction for the builder, and
-    // possibly work our way up.
-    //
-    auto defaultInsertLoc = builder->getInsertLoc();
-    auto defaultParent = defaultInsertLoc.getParent();
-    auto parent = defaultParent;
-    while (parent)
-    {
-        // Inserting into the top level of a module?
-        // That is fine, and we can stop searching.
-        if (as<IRModuleInst>(parent))
-            break;
-
-        // Inserting into a basic block inside of
-        // a generic? That is okay too.
-        if (auto block = as<IRBlock>(parent))
-        {
-            if (as<IRGeneric>(block->parent))
-                break;
-        }
-
-        // Otherwise, move up the chain.
-        parent = parent->parent;
-    }
-
-    // If we somehow ran out of parents (possibly
-    // because an instruction wasn't linked into
-    // the full hierarchy yet), then we will
-    // fall back to inserting into the overall module.
-    if (!parent)
-    {
-        parent = builder->getModule()->getModuleInst();
-    }
-
-    // If it turns out that we are inserting into the
-    // current "insert into" parent for the builder, then
-    // we need to respect its "insert before" setting
-    // as well.
-    if (parent == defaultParent)
-    {
-        value->insertAt(defaultInsertLoc);
-    }
-    else
-    {
-        value->insertAtEnd(parent);
-    }
-}
-
 IRInst* IRBuilder::addDifferentiableTypeDictionaryDecoration(IRInst* target)
 {
     return addDecoration(target, kIROp_DifferentiableTypeDictionaryDecoration);
@@ -4986,6 +5027,14 @@ IRInst* IRBuilder::emitLoad(IRType* type, IRInst* ptr)
     return inst;
 }
 
+IRInst* IRBuilder::emitLoad(IRType* type, IRInst* ptr, IRInst* align)
+{
+    auto inst = createInst<IRLoad>(this, kIROp_Load, type, ptr, getAttr(kIROp_AlignedAttr, align));
+
+    addInst(inst);
+    return inst;
+}
+
 IRInst* IRBuilder::emitLoad(IRInst* ptr)
 {
     // Note: a `load` operation does not consider the rate
@@ -5020,6 +5069,20 @@ IRInst* IRBuilder::emitLoad(IRInst* ptr)
 IRInst* IRBuilder::emitStore(IRInst* dstPtr, IRInst* srcVal)
 {
     auto inst = createInst<IRStore>(this, kIROp_Store, nullptr, dstPtr, srcVal);
+
+    addInst(inst);
+    return inst;
+}
+
+IRInst* IRBuilder::emitStore(IRInst* dstPtr, IRInst* srcVal, IRInst* align)
+{
+    auto inst = createInst<IRStore>(
+        this,
+        kIROp_Store,
+        nullptr,
+        dstPtr,
+        srcVal,
+        getAttr(kIROp_AlignedAttr, align));
 
     addInst(inst);
     return inst;
@@ -5287,6 +5350,10 @@ IRInst* IRBuilder::emitElementAddress(IRInst* basePtr, IRInst* index)
     else if (auto matrixType = as<IRMatrixType>(valueType))
     {
         type = getVectorType(matrixType->getElementType(), matrixType->getColumnCount());
+    }
+    else if (auto coopMatType = as<IRCoopMatrixType>(valueType))
+    {
+        type = coopMatType->getElementType();
     }
     else if (const auto basicType = as<IRBasicType>(valueType))
     {
@@ -5643,6 +5710,14 @@ IRInst* IRBuilder::emitReturn()
     return inst;
 }
 
+IRInst* IRBuilder::emitDefer(IRBlock* deferBlock, IRBlock* mergeBlock, IRBlock* scopeEndBlock)
+{
+    auto inst =
+        createInst<IRDefer>(this, kIROp_Defer, nullptr, deferBlock, mergeBlock, scopeEndBlock);
+    addInst(inst);
+    return inst;
+}
+
 IRInst* IRBuilder::emitThrow(IRInst* val)
 {
     auto inst = createInst<IRThrow>(this, kIROp_Throw, nullptr, val);
@@ -5675,6 +5750,13 @@ IRInst* IRBuilder::emitCheckpointObject(IRInst* value)
 {
     auto inst =
         createInst<IRCheckpointObject>(this, kIROp_CheckpointObject, value->getFullType(), value);
+    addInst(inst);
+    return inst;
+}
+
+IRInst* IRBuilder::emitLoopExitValue(IRInst* value)
+{
+    auto inst = createInst<IRLoopExitValue>(this, kIROp_LoopExitValue, value->getFullType(), value);
     addInst(inst);
     return inst;
 }
@@ -7085,6 +7167,76 @@ void dumpIRGeneric(IRDumpContext* context, IRGeneric* witnessTable)
     dump(context, "}\n");
 }
 
+static void dumpEmbeddedDownstream(IRDumpContext* context, IRInst* inst)
+{
+    auto targetInst = inst->getOperand(0);
+    auto blobInst = inst->getOperand(1);
+
+    // Get the target value
+    auto targetLit = as<IRIntLit>(targetInst);
+    if (!targetLit)
+    {
+        dump(context, "EmbeddedDownstreamIR(invalid target)");
+        return;
+    }
+
+    // Get the blob
+    auto blobLitInst = as<IRBlobLit>(blobInst);
+    if (!blobLitInst)
+    {
+        dump(context, "EmbeddedDownstreamIR(invalid blob)");
+        return;
+    }
+
+    dump(context, "EmbeddedDownstreamIR(");
+    dump(context, targetLit->getValue());
+    dump(context, " : Int, ");
+
+    // If target is SPIR-V (6), disassemble the blob
+    if (targetLit->getValue() == (IRIntegerValue)CodeGenTarget::SPIRV)
+    {
+        auto blob = blobLitInst->getStringSlice();
+        const uint32_t* spirvCode = (const uint32_t*)blob.begin();
+        const size_t spirvWordCount = blob.getLength() / sizeof(uint32_t);
+
+        // Get the compiler from the session through the module
+        auto module = inst->getModule();
+        auto session = module->getSession();
+        IDownstreamCompiler* compiler =
+            session->getOrLoadDownstreamCompiler(PassThroughMode::SpirvDis, nullptr);
+
+        if (compiler)
+        {
+            // Use glslang interface to disassemble with string output
+            String disassemblyOutput;
+            if (SLANG_SUCCEEDED(compiler->disassembleWithResult(
+                    spirvCode,
+                    int(spirvWordCount),
+                    disassemblyOutput)))
+            {
+                // Dump the captured disassembly
+                dump(context, "\n");
+                dumpIndent(context);
+                dump(context, disassemblyOutput);
+            }
+            else
+            {
+                dump(context, "<disassembly failed>");
+            }
+        }
+        else
+        {
+            dump(context, "<unavailable disassembler>");
+        }
+    }
+    else
+    {
+        // TODO: Add DXIL disassembly call here.
+        dump(context, "<binary blob>");
+    }
+    dump(context, ")");
+}
+
 static void dumpInstExpr(IRDumpContext* context, IRInst* inst)
 {
     if (!inst)
@@ -7132,6 +7284,13 @@ static void dumpInstExpr(IRDumpContext* context, IRInst* inst)
         default:
             break;
         }
+    }
+
+    // Special case EmbeddedDownstreamIR to show SPIR-V disassembly
+    if (op == kIROp_EmbeddedDownstreamIR)
+    {
+        dumpEmbeddedDownstream(context, inst);
+        return;
     }
 
     // Special case the SPIR-V asm operands as the distinction here is
@@ -7543,8 +7702,6 @@ bool isIntegralType(IRType* t)
         case BaseType::UInt64:
         case BaseType::IntPtr:
         case BaseType::UIntPtr:
-        case BaseType::Int8x4Packed:
-        case BaseType::UInt8x4Packed:
             return true;
         default:
             return false;
@@ -7590,10 +7747,6 @@ IntInfo getIntTypeInfo(const IRType* intType)
         return {32, true};
     case kIROp_Int64Type:
         return {64, true};
-
-    case kIROp_Int8x4PackedType:
-    case kIROp_UInt8x4PackedType:
-        return {32, false};
 
     case kIROp_IntPtrType:  // target platform dependent
     case kIROp_UIntPtrType: // target platform dependent
@@ -7882,7 +8035,11 @@ static void _replaceInstUsesWith(IRInst* thisInst, IRInst* other)
 
             auto user = uu->getUser();
             bool userIsHoistable = getIROpInfo(user->getOp()).isHoistable();
-            if (userIsHoistable)
+
+            // We want to de-duplicate WitnessTable but we don't really want to hoist them.
+            bool userNeedToBeHoisted = userIsHoistable && (user->getOp() != kIROp_WitnessTable);
+
+            if (userNeedToBeHoisted)
             {
                 if (!dedupContext)
                 {
@@ -7899,7 +8056,7 @@ static void _replaceInstUsesWith(IRInst* thisInst, IRInst* other)
             // to a point before `user`, if it is not already so.
             _maybeHoistOperand(uu);
 
-            if (userIsHoistable)
+            if (userNeedToBeHoisted)
             {
                 // Is the updated inst already exists in the global numbering map?
                 // If so, we need to continue work on replacing the updated inst with the existing
@@ -8847,24 +9004,33 @@ void IRInst::addBlock(IRBlock* block)
     block->insertAtEnd(this);
 }
 
-void IRInst::dump()
+void IRInst::dump(String& outStr)
 {
+    StringBuilder sb;
+
     if (auto intLit = as<IRIntLit>(this))
     {
-        std::cout << intLit->getValue() << std::endl;
+        sb << intLit->getValue();
     }
     else if (auto stringLit = as<IRStringLit>(this))
     {
-        std::cout << stringLit->getStringSlice().begin() << std::endl;
+        sb << stringLit->getStringSlice();
     }
     else
     {
-        StringBuilder sb;
         IRDumpOptions options;
         StringWriter writer(&sb, Slang::WriterFlag::AutoFlush);
         dumpIR(this, options, nullptr, &writer);
-        std::cout << sb.toString().begin() << std::endl;
     }
+
+    outStr = sb.toString();
+}
+
+void IRInst::dump()
+{
+    String s;
+    dump(s);
+    std::cout << s.begin() << std::endl;
 }
 } // namespace Slang
 

@@ -277,6 +277,14 @@ Versions
 > HLSL shader model 6.8 and related capabilities of other targets.
 > Includes related GLSL/SPIRV extensions.
 
+`sm_6_9_version`
+> HLSL shader model 6.9 and related capabilities of other targets.
+> Does not include related GLSL/SPIRV extensions.
+
+`sm_6_9`
+> HLSL shader model 6.9 and related capabilities of other targets.
+> Includes related GLSL/SPIRV extensions.
+
 `GLSL_130`
 > GLSL 130 and related capabilities of other targets.
 
@@ -399,6 +407,9 @@ Extensions
 `SPV_NV_shader_subgroup_partitioned`
 > Represents the SPIR-V extension for shader subgroup partitioned.
 
+`SPV_KHR_subgroup_rotate`
+> Represents the SPIR-V extension enables rotating values across invocations within a subgroup.
+
 `SPV_NV_ray_tracing_motion_blur`
 > Represents the SPIR-V extension for ray tracing motion blur.
 
@@ -408,6 +419,9 @@ Extensions
 
 `SPV_NV_shader_image_footprint`
 > Represents the SPIR-V extension for shader image footprint.
+
+`SPV_KHR_compute_shader_derivatives`
+> Represents the SPIR-V extension for compute shader derivatives.
 
 `SPV_NV_compute_shader_derivatives`
 > Represents the SPIR-V extension for compute shader derivatives.
@@ -420,6 +434,9 @@ Extensions
 
 `SPV_NV_cooperative_vector`
 > Represents the SPIR-V extension for SPV_NV_cooperative_vector.
+
+`SPV_KHR_cooperative_matrix`
+> Represents the SPIR-V extension for SPV_KHR_cooperative_matrix.
 
 `spvAtomicFloat32AddEXT`
 > Represents the SPIR-V capability for atomic float 32 add operations.
@@ -487,6 +504,9 @@ Extensions
 `spvGroupNonUniformPartitionedNV`
 > Represents the SPIR-V capability for group non-uniform partitioned operations.
 
+`spvGroupNonUniformRotateKHR`
+> Represents the SPIR-V capability for group non-uniform rotate operations.
+
 `spvRayTracingMotionBlurNV`
 > Represents the SPIR-V capability for ray tracing motion blur.
 
@@ -531,6 +551,9 @@ Extensions
 
 `spvCooperativeVectorTrainingNV`
 > Represents the SPIR-V capability for cooperative vector training
+
+`spvCooperativeMatrixKHR`
+> Represents the SPIR-V capability for cooperative matrices
 
 `spvMaximalReconvergenceKHR`
 > Represents the SPIR-V capability for maximal reconvergence.
@@ -681,6 +704,9 @@ Extensions
 
 `GL_KHR_shader_subgroup_vote`
 > Represents the GL_KHR_shader_subgroup_vote extension.
+
+`GL_KHR_shader_subgroup_rotate`
+> Represents the GL_KHR_shader_subgroup_rotate extension.
 
 `GL_NV_compute_shader_derivatives`
 > Represents the GL_NV_compute_shader_derivatives extension.
@@ -1076,6 +1102,9 @@ Compound Capabilities
 `shader5_sm_5_0`
 > Capabilities required to use sm_5_0 features apart of GL_ARB_gpu_shader5
 
+`pack_vector`
+> Capabilities required to use pack/unpack intrinsics on packed vector data
+
 `subgroup_basic`
 > Capabilities required to use GLSL-style subgroup operations 'subgroup_basic'
 
@@ -1111,6 +1140,9 @@ Compound Capabilities
 
 `subgroup_partitioned`
 > Capabilities required to use GLSL-style subgroup operations 'subgroup_partitioned'
+
+`subgroup_rotate`
+> Capabilities required to use GLSL-style subgroup rotate operations 'subgroup_rotate'
 
 `atomic_glsl_hlsl_nvapi_cuda_metal_float1`
 > (All implemented targets) Capabilities required to use atomic operations of GLSL tier-1 float atomics
@@ -1200,6 +1232,9 @@ Other
 ----------------------
 *Capabilities which may be deprecated*
 
+`cooperative_matrix`
+> Capabilities needed to use cooperative matrices
+
 `SPIRV_1_0`
 > Use `spirv_1_0` instead
 
@@ -1259,6 +1294,9 @@ Other
 
 `DX_6_8`
 > Use `sm_6_8` instead
+
+`DX_6_9`
+> Use `sm_6_9` instead
 
 `GLSL_410_SPIRV_1_0`
 > User should not use this capability

@@ -12,8 +12,8 @@
 // logic also orchestrates the overall flow and how
 // and when things get checked.
 
+#include "slang-ast-forward-declarations.h"
 #include "slang-ast-iterator.h"
-#include "slang-ast-reflect.h"
 #include "slang-ast-synthesis.h"
 #include "slang-lookup.h"
 #include "slang-parser.h"
@@ -649,6 +649,8 @@ struct SemanticsDeclReferenceVisitor : public SemanticsDeclVisitorBase,
     void visitDiscardStmt(DiscardStmt*) { return; }
 
     void visitReturnStmt(ReturnStmt* stmt) { dispatchIfNotNull(stmt->expression); }
+
+    void visitDeferStmt(DeferStmt* stmt) { dispatchIfNotNull(stmt->statement); }
 
     void visitWhileStmt(WhileStmt* stmt)
     {
@@ -1981,8 +1983,6 @@ void SemanticsDeclHeaderVisitor::checkVarDeclCommon(VarDeclBase* varDecl)
             case BaseType::UInt:
             case BaseType::UInt64:
             case BaseType::UIntPtr:
-            case BaseType::Int8x4Packed:
-            case BaseType::UInt8x4Packed:
                 break;
             default:
                 getSink()->diagnose(varDecl, Diagnostics::staticConstRequirementMustBeIntOrBool);
@@ -3590,7 +3590,7 @@ bool SemanticsVisitor::doesAccessorMatchRequirement(
     //
     auto satisfyingMemberClass = satisfyingMemberDeclRef.getDecl()->getClass();
     auto requiredMemberClass = requiredMemberDeclRef.getDecl()->getClass();
-    if (!satisfyingMemberClass.isSubClassOfImpl(requiredMemberClass))
+    if (!satisfyingMemberClass.isSubClassOf(requiredMemberClass))
         return false;
 
     // We do not check the parameters or return types of accessors
@@ -7069,7 +7069,8 @@ bool SemanticsVisitor::checkInterfaceConformance(
     // the time we are compiling and handle those, and punt on the larger issue
     // for a bit longer.
     //
-    for (auto candidateExt : getCandidateExtensions(superInterfaceDeclRef, this))
+    auto candidateExtensions = getCandidateExtensions(superInterfaceDeclRef, this);
+    for (const auto& candidateExt : candidateExtensions)
     {
         // We need to apply the extension to the interface type that our
         // concrete type is inheriting from.
@@ -10589,6 +10590,7 @@ void SemanticsDeclHeaderVisitor::visitIncludeDecl(IncludeDecl* decl)
 
     if (fileDecl->members.getCount() == 0)
         return;
+
     auto firstMember = fileDecl->members[0];
     if (auto moduleDeclaration = as<ModuleDeclarationDecl>(firstMember))
     {
@@ -10610,6 +10612,7 @@ void SemanticsDeclHeaderVisitor::visitIncludeDecl(IncludeDecl* decl)
         auto moduleName = getSimpleModuleName(implementing->moduleNameAndLoc.name);
         auto expectedModuleName = moduleDecl->getName();
         bool shouldSkipDiagnostic = false;
+
         if (moduleDecl->members.getCount())
         {
             if (auto moduleDeclarationDecl = as<ModuleDeclarationDecl>(moduleDecl->members[0]))
@@ -10629,16 +10632,44 @@ void SemanticsDeclHeaderVisitor::visitIncludeDecl(IncludeDecl* decl)
                 }
             }
         }
-        if (!shouldSkipDiagnostic && !moduleName.getUnownedSlice().caseInsensitiveEquals(
-                                         getText(expectedModuleName).getUnownedSlice()))
+
+        if (!shouldSkipDiagnostic)
         {
-            getSink()->diagnose(
-                decl->moduleNameAndLoc.loc,
-                Diagnostics::includedFileDoesNotImplementCurrentModule,
-                expectedModuleName,
-                moduleName);
-            return;
+            // First check for the case when the user has put a file extension
+            // in the include path
+            String moduleNameStr = moduleName.getUnownedSlice();
+            String expectedModuleNameStr = getText(expectedModuleName).getUnownedSlice();
+
+            // Check if module name has a source file extension
+            if (moduleNameStr.endsWith(".slang"))
+            {
+                String normalizedName = moduleNameStr.subString(0, moduleNameStr.getLength() - 6);
+
+                // If the normalized name would match, emit warning but continue
+                if (normalizedName.getUnownedSlice().caseInsensitiveEquals(
+                        expectedModuleNameStr.getUnownedSlice()))
+                {
+                    getSink()->diagnose(
+                        implementing->moduleNameAndLoc.loc,
+                        Diagnostics::moduleImplementationHasFileExtension,
+                        moduleNameStr,
+                        normalizedName);
+                    return;
+                }
+            }
+
+            if (!moduleNameStr.getUnownedSlice().caseInsensitiveEquals(
+                    expectedModuleNameStr.getUnownedSlice()))
+            {
+                getSink()->diagnose(
+                    decl->moduleNameAndLoc.loc,
+                    Diagnostics::includedFileDoesNotImplementCurrentModule,
+                    expectedModuleName,
+                    moduleName);
+                return;
+            }
         }
+
         return;
     }
 
@@ -10647,6 +10678,7 @@ void SemanticsDeclHeaderVisitor::visitIncludeDecl(IncludeDecl* decl)
         Diagnostics::includedFileMissingImplementing,
         name);
 }
+
 
 void SemanticsDeclScopeWiringVisitor::visitImplementingDecl(ImplementingDecl* decl)
 {
@@ -11229,7 +11261,7 @@ void _foreachDirectOrExtensionMemberOfType(
     //
     for (auto memberDeclRef : getMembers(semantics->getASTBuilder(), containerDeclRef))
     {
-        if (memberDeclRef.getDecl()->getClass().isSubClassOfImpl(syntaxClass))
+        if (memberDeclRef.getDecl()->getClass().isSubClassOf(syntaxClass))
         {
             callback(memberDeclRef, (void*)userData);
         }
@@ -11241,7 +11273,8 @@ void _foreachDirectOrExtensionMemberOfType(
     if (auto aggTypeDeclRef = containerDeclRef.as<AggTypeDecl>())
     {
         auto aggType = DeclRefType::create(semantics->getASTBuilder(), aggTypeDeclRef);
-        for (auto extDecl : getCandidateExtensions(aggTypeDeclRef, semantics))
+        auto candidateExtensions = getCandidateExtensions(aggTypeDeclRef, semantics);
+        for (auto extDecl : candidateExtensions)
         {
             // Note that `extDecl` may have been declared for a type
             // base on the declaration that `aggTypeDeclRef` refers
@@ -11261,7 +11294,7 @@ void _foreachDirectOrExtensionMemberOfType(
 
             for (auto memberDeclRef : getMembers(semantics->getASTBuilder(), extDeclRef))
             {
-                if (memberDeclRef.getDecl()->getClass().isSubClassOfImpl(syntaxClass))
+                if (memberDeclRef.getDecl()->getClass().isSubClassOf(syntaxClass))
                 {
                     callback(memberDeclRef, (void*)userData);
                 }
@@ -12414,7 +12447,7 @@ bool SemanticsDeclAttributesVisitor::_synthesizeCtorSignature(StructDecl* struct
     // any constructors. see:
     // https://github.com/shader-slang/slang/blob/master/docs/proposals/004-initialization.md#inheritance-initialization
     if (_hasExplicitConstructor(structDecl, true))
-        return false;
+        return true;
 
     // synthesize the signature first.
     // The constructor's visibility level is the same as the struct itself.
@@ -12494,6 +12527,12 @@ void SemanticsDeclAttributesVisitor::visitStructDecl(StructDecl* structDecl)
             DeclVisibility ctorVisibility = getDeclVisibility(structDecl);
             createCtor(structDecl, ctorVisibility);
         }
+    }
+
+    // Check if this is a ray payload struct and validate field access qualifiers
+    if (structDecl->findModifier<RayPayloadAttribute>())
+    {
+        checkRayPayloadStructFields(structDecl);
     }
 
     int backingWidth = 0;

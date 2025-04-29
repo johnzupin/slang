@@ -168,6 +168,12 @@ struct IRIntrinsicOpDecoration : IRDecoration
     IROp getIntrinsicOp() { return (IROp)getIntrinsicOpOperand()->getValue(); }
 };
 
+struct IRAlignedAddressDecoration : IRDecoration
+{
+    IR_LEAF_ISA(AlignedAddressDecoration)
+    IRInst* getAlignment() { return getOperand(0); }
+};
+
 struct IRGLSLOuterArrayDecoration : IRDecoration
 {
     enum
@@ -496,6 +502,12 @@ struct IRGLSLOffsetDecoration : IRDecoration
     IRIntLit* getOffset() { return cast<IRIntLit>(getOperand(0)); }
 };
 
+struct IRVkStructOffsetDecoration : IRDecoration
+{
+    IR_LEAF_ISA(VkStructOffsetDecoration)
+    IRIntLit* getOffset() { return cast<IRIntLit>(getOperand(0)); }
+};
+
 struct IRNVAPIMagicDecoration : IRDecoration
 {
     enum
@@ -555,6 +567,8 @@ struct IROutputTopologyDecoration : IRDecoration
     IR_LEAF_ISA(OutputTopologyDecoration)
 
     IRStringLit* getTopology() { return cast<IRStringLit>(getOperand(0)); }
+
+    IRIntegerValue getTopologyType() { return cast<IRIntLit>(getOperand(1))->getValue(); }
 };
 
 struct IRPartitioningDecoration : IRDecoration
@@ -878,6 +892,8 @@ IR_SIMPLE_DECORATION(UnsafeForceInlineEarlyDecoration)
 IR_SIMPLE_DECORATION(ForceInlineDecoration)
 
 IR_SIMPLE_DECORATION(ForceUnrollDecoration)
+
+IR_SIMPLE_DECORATION(PhysicalTypeDecoration)
 
 struct IRSizeAndAlignmentDecoration : IRDecoration
 {
@@ -2700,6 +2716,13 @@ struct IRCheckpointObject : IRInst
     IRInst* getVal() { return getOperand(0); }
 };
 
+struct IRLoopExitValue : IRInst
+{
+    IR_LEAF_ISA(LoopExitValue);
+
+    IRInst* getVal() { return getOperand(0); }
+};
+
 // Signals that this point in the code should be unreachable.
 // We can/should emit a dataflow error if we can ever determine
 // that a block ending in one of these can actually be
@@ -2833,6 +2856,15 @@ struct IRTryCall : IRTerminatorInst
     UInt getArgCount() { return getOperandCount() - 3; }
     IRUse* getArgs() { return getOperands() + 3; }
     IRInst* getArg(UInt index) { return getOperand(index + 3); }
+};
+
+struct IRDefer : IRTerminatorInst
+{
+    IR_LEAF_ISA(Defer);
+
+    IRBlock* getDeferBlock() { return cast<IRBlock>(getOperand(0)); }
+    IRBlock* getMergeBlock() { return cast<IRBlock>(getOperand(1)); }
+    IRBlock* getScopeBlock() { return cast<IRBlock>(getOperand(2)); }
 };
 
 struct IRSwizzle : IRInst
@@ -2969,8 +3001,6 @@ struct IRWitnessTable : IRInst
     }
 
     IRType* getConcreteType() { return (IRType*)getOperand(0); }
-
-    void setConcreteType(IRType* t) { return setOperand(0, t); }
 
     IR_LEAF_ISA(WitnessTable)
 };
@@ -3506,9 +3536,9 @@ struct IRRequirePrelude : IRInst
     UnownedStringSlice getPrelude() { return as<IRStringLit>(getOperand(0))->getStringSlice(); }
 };
 
-struct IRRequireGLSLExtension : IRInst
+struct IRRequireTargetExtension : IRInst
 {
-    IR_LEAF_ISA(RequireGLSLExtension)
+    IR_LEAF_ISA(RequireTargetExtension)
     UnownedStringSlice getExtensionName()
     {
         return as<IRStringLit>(getOperand(0))->getStringSlice();
@@ -3788,7 +3818,11 @@ public:
     /// Get a 'SPIRV literal'
     IRSPIRVLiteralType* getSPIRVLiteralType(IRType* type);
 
-    IRArrayTypeBase* getArrayTypeBase(IROp op, IRType* elementType, IRInst* elementCount);
+    IRArrayTypeBase* getArrayTypeBase(
+        IROp op,
+        IRType* elementType,
+        IRInst* elementCount,
+        IRInst* stride = nullptr);
 
     IRArrayType* getArrayType(IRType* elementType, IRInst* elementCount);
 
@@ -4324,7 +4358,7 @@ public:
     IRVar* emitVar(IRType* type, AddressSpace addressSpace);
 
     IRInst* emitLoad(IRType* type, IRInst* ptr);
-
+    IRInst* emitLoad(IRType* type, IRInst* ptr, IRInst* align);
     IRInst* emitLoad(IRInst* ptr);
 
     IRInst* emitLoadReverseGradient(IRType* type, IRInst* diffValue);
@@ -4333,6 +4367,7 @@ public:
     IRInst* emitDiffParamRef(IRType* type, IRInst* param);
 
     IRInst* emitStore(IRInst* dstPtr, IRInst* srcVal);
+    IRInst* emitStore(IRInst* dstPtr, IRInst* srcVal, IRInst* align);
 
     IRInst* emitAtomicStore(IRInst* dstPtr, IRInst* srcVal, IRInst* memoryOrder);
 
@@ -4442,9 +4477,12 @@ public:
 
     IRInst* emitThrow(IRInst* val);
 
+    IRInst* emitDefer(IRBlock* deferBlock, IRBlock* mergeBlock, IRBlock* scopeEndBlock);
+
     IRInst* emitDiscard();
 
     IRInst* emitCheckpointObject(IRInst* value);
+    IRInst* emitLoopExitValue(IRInst* value);
 
     IRInst* emitUnreachable();
     IRInst* emitMissingReturn();
@@ -4725,6 +4763,15 @@ public:
     IRVarLayout* getVarLayout(List<IRInst*> const& operands);
     IREntryPointLayout* getEntryPointLayout(IRVarLayout* paramsLayout, IRVarLayout* resultLayout);
 
+    void addPhysicalTypeDecoration(IRInst* value)
+    {
+        addDecoration(value, kIROp_PhysicalTypeDecoration);
+    }
+
+    void addAlignedAddressDecoration(IRInst* value, IRInst* alignment)
+    {
+        addDecoration(value, kIROp_AlignedAddressDecoration, alignment);
+    }
 
     void addNameHintDecoration(IRInst* value, IRStringLit* name)
     {

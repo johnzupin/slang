@@ -23,6 +23,18 @@ IRType* getVectorElementType(IRType* type)
         return vectorType->getElementType();
     if (auto coopVecType = as<IRCoopVectorType>(type))
         return coopVecType->getElementType();
+    if (auto coopMatType = as<IRCoopMatrixType>(type))
+        return coopMatType->getElementType();
+    return type;
+}
+
+IRType* getVectorOrCoopMatrixElementType(IRType* type)
+{
+    auto vectorElementType = getVectorElementType(type);
+    if (vectorElementType != type)
+        return vectorElementType;
+    if (auto coopMatrixType = as<IRCoopMatrixType>(type))
+        return coopMatrixType->getElementType();
     return type;
 }
 
@@ -107,8 +119,6 @@ IROp getTypeStyle(IROp op)
     case kIROp_UInt64Type:
     case kIROp_IntPtrType:
     case kIROp_UIntPtrType:
-    case kIROp_Int8x4PackedType:
-    case kIROp_UInt8x4PackedType:
         {
             // All int like
             return kIROp_IntType;
@@ -144,8 +154,6 @@ IROp getTypeStyle(BaseType op)
     case BaseType::UInt:
     case BaseType::UInt64:
     case BaseType::UIntPtr:
-    case BaseType::Int8x4Packed:
-    case BaseType::UInt8x4Packed:
         return kIROp_IntType;
     case BaseType::Half:
     case BaseType::Float:
@@ -476,12 +484,6 @@ void getTypeNameHint(StringBuilder& sb, IRInst* type)
     case kIROp_UIntPtrType:
         sb << "uintptr";
         break;
-    case kIROp_Int8x4PackedType:
-        sb << "int8_t4_packed";
-        break;
-    case kIROp_UInt8x4PackedType:
-        sb << "uint8_t4_packed";
-        break;
     case kIROp_CharType:
         sb << "char";
         break;
@@ -625,11 +627,6 @@ void getTypeNameHint(StringBuilder& sb, IRInst* type)
         break;
     case kIROp_HitObjectType:
         sb << "HitObject";
-        break;
-    case kIROp_HLSLConstBufferPointerType:
-        sb << "ConstantBufferPointer<";
-        getTypeNameHint(sb, as<IRHLSLConstBufferPointerType>(type)->getValueType());
-        sb << ">";
         break;
     case kIROp_HLSLStructuredBufferType:
         sb << "StructuredBuffer<";
@@ -1862,10 +1859,6 @@ UnownedStringSlice getBasicTypeNameHint(IRType* basicType)
         return UnownedStringSlice::fromLiteral("uint64");
     case kIROp_UIntPtrType:
         return UnownedStringSlice::fromLiteral("uintptr");
-    case kIROp_Int8x4PackedType:
-        return UnownedStringSlice::fromLiteral("int8_t4_packed");
-    case kIROp_UInt8x4PackedType:
-        return UnownedStringSlice::fromLiteral("uint8_t4_packed");
     case kIROp_FloatType:
         return UnownedStringSlice::fromLiteral("float");
     case kIROp_HalfType:
@@ -2181,7 +2174,9 @@ void legalizeDefUse(IRGlobalValueWithCode* func)
             {
                 // If inst is an var, this is easy, we just move it to the
                 // common dominator.
-                var->insertBefore(commonDominator->getTerminator());
+                if (var->getParent() != commonDominator)
+                    var->insertBefore(commonDominator->getTerminator());
+
                 if (shouldInitializeVar)
                 {
                     IRBuilder builder(func);

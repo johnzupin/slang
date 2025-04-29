@@ -577,9 +577,6 @@ void HLSLSourceEmitter::emitEntryPointAttributesImpl(
             emitNumThreadsAttribute();
             if (auto decor = irFunc->findDecoration<IROutputTopologyDecoration>())
             {
-                // TODO: Ellie validate here/elsewhere, what's allowed here is
-                // different from the tesselator
-                // The naming here is plural, so add an 's'
                 _emitHLSLDecorationSingleString("outputtopology", irFunc, decor->getTopology());
             }
             break;
@@ -902,8 +899,6 @@ bool HLSLSourceEmitter::tryEmitInstExprImpl(IRInst* inst, const EmitOpInfo& inOu
             case BaseType::UInt64:
             case BaseType::UIntPtr:
             case BaseType::Bool:
-            case BaseType::Int8x4Packed:
-            case BaseType::UInt8x4Packed:
                 // Because the intermediate type will always
                 // be an integer type, we can convert to
                 // another integer type of the same size
@@ -943,8 +938,6 @@ bool HLSLSourceEmitter::tryEmitInstExprImpl(IRInst* inst, const EmitOpInfo& inOu
             case BaseType::UInt:
             case BaseType::Int:
             case BaseType::Bool:
-            case BaseType::Int8x4Packed:
-            case BaseType::UInt8x4Packed:
                 break;
             case BaseType::UInt16:
             case BaseType::Int16:
@@ -1330,8 +1323,6 @@ void HLSLSourceEmitter::emitSimpleTypeImpl(IRType* type)
     case kIROp_Int16Type:
     case kIROp_UInt16Type:
     case kIROp_HalfType:
-    case kIROp_Int8x4PackedType:
-    case kIROp_UInt8x4PackedType:
         {
             m_writer->emit(getDefaultBuiltinTypeName(type->getOp()));
             return;
@@ -1676,8 +1667,18 @@ void HLSLSourceEmitter::emitPostKeywordTypeAttributesImpl(IRInst* inst)
     {
         m_writer->emit("[payload] ");
     }
-    // This can be re-enabled when we add PAQs: https://github.com/shader-slang/slang/issues/3448
-    const bool enablePAQs = false;
+
+    // Get the target profile to determine if PAQs are supported
+    bool enablePAQs = false;
+    auto profile = getTargetProgram()->getOptionSet().getProfile();
+    if (profile.getFamily() == ProfileFamily::DX)
+    {
+        // PAQs are default in Shader Model 6.7 and above when called with `--profile lib_6_7`
+
+        auto version = profile.getVersion();
+        enablePAQs = version >= ProfileVersion::DX_6_7;
+    }
+
     if (enablePAQs)
     {
         if (const auto payloadDecoration = inst->findDecoration<IRRayPayloadDecoration>())

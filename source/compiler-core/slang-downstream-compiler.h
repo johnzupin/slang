@@ -260,6 +260,9 @@ struct DownstreamCompileOptions
     /// Profile name to use, only required for compiles that need to compile against a a specific
     /// profiles. Profile names are tied to compilers and targets.
     TerminatedCharSlice profileName;
+    // According to DirectX Raytracing Specification, PAQs are supported in Shader Model 6.7 and
+    // above
+    bool enablePAQ = false;
 
     /// The stage being compiled for
     SlangStage stage = SLANG_STAGE_NONE;
@@ -340,9 +343,25 @@ public:
     /// Disassemble and print to stdout
     virtual SLANG_NO_THROW SlangResult SLANG_MCALL
     disassemble(const uint32_t* contents, int contentsSize) = 0;
+    /// Disassemble and return the result as a string
+    virtual SLANG_NO_THROW SlangResult SLANG_MCALL
+    disassembleWithResult(const uint32_t* contents, int contentsSize, String& outString) = 0;
 
     /// True if underlying compiler uses file system to communicate source
     virtual SLANG_NO_THROW bool SLANG_MCALL isFileBased() = 0;
+
+    virtual SLANG_NO_THROW int SLANG_MCALL link(
+        const uint32_t** modules,
+        const uint32_t* moduleSizes,
+        const uint32_t moduleCount,
+        IArtifact** outArtifact)
+    {
+        SLANG_UNREFERENCED_PARAMETER(modules);
+        SLANG_UNREFERENCED_PARAMETER(moduleSizes);
+        SLANG_UNREFERENCED_PARAMETER(moduleCount);
+        SLANG_UNREFERENCED_PARAMETER(outArtifact);
+        return 0;
+    }
 };
 
 class DownstreamCompilerBase : public ComBaseObject, public IDownstreamCompiler
@@ -382,6 +401,17 @@ public:
     {
         SLANG_UNUSED(contents);
         SLANG_UNUSED(contentsSize);
+        return SLANG_FAIL;
+    }
+
+    virtual SLANG_NO_THROW SlangResult SLANG_MCALL disassembleWithResult(
+        const uint32_t* contents,
+        int contentsSize,
+        String& outString) SLANG_OVERRIDE
+    {
+        SLANG_UNUSED(contents);
+        SLANG_UNUSED(contentsSize);
+        SLANG_UNUSED(outString);
         return SLANG_FAIL;
     }
 

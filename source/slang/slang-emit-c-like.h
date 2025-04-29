@@ -416,8 +416,8 @@ public:
     virtual void emitMemoryQualifiers(IRInst* /*varInst*/){};
     virtual void emitStructFieldAttributes(
         IRStructType* /* structType */,
-        IRStructField* /* field */
-    ){};
+        IRStructField* /* field */,
+        bool /* allowOffsetLayout */){};
     void emitInterpolationModifiers(IRInst* varInst, IRType* valueType, IRVarLayout* layout);
     void emitMeshShaderModifiers(IRInst* varInst);
     virtual void emitPackOffsetModifier(
@@ -677,6 +677,8 @@ protected:
     // Emit the argument list (including paranthesis) in a `CallInst`
     void _emitCallArgList(IRCall* call, int startingOperandIndex = 1);
     virtual void emitCallArg(IRInst* arg);
+
+    virtual void emitRequireExtension(IRRequireTargetExtension* inst) { SLANG_UNUSED(inst); }
 
     String _generateUniqueName(const UnownedStringSlice& slice);
 
