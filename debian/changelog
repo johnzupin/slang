@@ -1,3 +1,414 @@
+slang (2025.7.1~rc1-1lunarg22.04-1) jammy; urgency=medium
+
+  [ Yong He ]
+  * Fix member lookup in left hand side of `where` clause. (#6490)
+
+  [ Anders Leino ]
+  * Prepare for render test api migration (#6498)
+
+  [ Darren Wihandi ]
+  * Add WaveGetLane* support for Metal and WGSL (#6371)
+
+  [ Ellie Hermaszewska ]
+  * Resolve 'extern' types during type layout generation if possible (#6450)
+
+  [ Darren Wihandi ]
+  * Add Slang-specific intrinsics for integer pack/unpack (#6459)
+
+  [ Jay Kwak ]
+  * Fix build error when SLANG_ENABLE_TESTS is set to OFF (#6420)
+
+  [ Darren Wihandi ]
+  * Implement sparse texture Sample* intrinsics for SPIRV (#6377)
+
+  [ Yong He ]
+  * Allow partial specialization of existential arguments. (#6487)
+
+  [ Mukund Keshava ]
+  * Consolidate multiple inouts/outs into struct (#6435)
+
+  [ Anders Leino ]
+  * Document how unit tests are defined and run (#6448)
+  * Fix option set serialization bug (#6515)
+  * Fix codegen bug when targeting PTX with new API (#6506)
+
+  [ cheneym2 ]
+  * Support SPIR-V deferred linking option (#6500)
+  * Add module organization suggestion doc (#6509)
+
+  [ Anders Leino ]
+  * Get options also from the default target (#6530)
+
+  [ Yong He ]
+  * Update SPIRV-Tools and fix new validation errors. (#6511)
+
+  [ cheneym2 ]
+  * Show adapter info in slang-test CI runs (#6535)
+
+  [ Yong He ]
+  * Fix lowering of `extern` types with defaults. (#6512)
+
+  [ jarcherNV ]
+  * Update build to allow setting external paths (#6528)
+
+  [ kaizhangNV ]
+  * Fix a bug in default ctor synthesizing (#6527)
+
+  [ jarcherNV ]
+  * Add option to exclude webgpu-dawn and slang-tint (#6537)
+
+  [ Yong He ]
+  * Fix SPIRV generator ID. (#6536)
+
+  [ Anders Leino ]
+  * Sharpen condition on warning about used capabilities relative to selected profile (#6538)
+  * Add module reference options to options list when parsing them (#6539)
+
+  [ cheneym2 ]
+  * UseHighestVersion when calling spirv-link (#6559)
+  * Add missing error check (#6570)
+
+  [ Mukund Keshava ]
+  * IR: Add SPIR-V disassembly for embedded downstream IR dumps (#6529)
+
+  [ cheneym2 ]
+  * Don't crash when precompiling twice (#6576)
+
+  [ Tony (Atanas) Zlatinski ]
+  * Set the HLSL supported compiler version to 2018 (#6502)
+
+  [ Anders Leino ]
+  * Add referenced modules as libraries when creating a session (#6569)
+  * Migrate render-test away from deprecated compile request API (#6514)
+
+  [ Simon Kallweit ]
+  * add SLANG_USER_CONFIG (#6584)
+
+  [ Ellie Hermaszewska ]
+  * test that link time extern struct layouts are visible for nested types (#6568)
+  * test for link type layout caching (#6567)
+
+  [ Darren Wihandi ]
+  * Add mesh shader output topology checks (#6592)
+
+  [ Ellie Hermaszewska ]
+  * Correct buffer length calculation in dumpSourceBytes (#6593)
+  * Use an explicit dependency for generated headers instead of source file dependency (#6594)
+
+  [ Harsh Aggarwal (NVIDIA) ]
+  * Fix: Respect user-defined output directory settings for libraries (#6604)
+
+  [ Darren Wihandi ]
+  * Implement GetDimensions for structured buffers on WGSL (#6609)
+
+  [ Sai Praveen Bangaru ]
+  * Fix lowering of associated types in generic interfaces (#6600)
+
+  [ Paradox84 ]
+  * fix trimming of "v" from version string (#6605)
+
+  [ Gangzheng Tong ]
+  * Add help screen to slang-test (#6611)
+
+  [ Anders Leino ]
+  * Add error diagnostic vectors and matrices with disallowed element types (#6596)
+
+  [ Sai Praveen Bangaru ]
+  * Fix crash when swizzling non-differentiable types (#6613)
+  * Add auto-diff support for `GetOffsetPtr` (#6625)
+
+  [ Sam Estep ]
+  * Delete accidental `lock` file (#6620)
+
+  [ Sai Praveen Bangaru ]
+  * Fix `IRVar` hoisting when its already in the right block. (#6626)
+
+  [ Yong He ]
+  * Fix MSVC warning D9025 when building external dependencies. (#6630)
+
+  [ Darren Wihandi ]
+  * Implement floating-point pack/unpack intrinsics for all targets (#6503)
+
+  [ Yong He ]
+  * Fix reinterpret and bitcast and generic arg parsing. (#6627)
+
+  [ Darren Wihandi ]
+  * Add SPIRV atomic debug type (#6616)
+  * Output SPV_KHR_compute_shader_derivatives extension string instead of the NV extension (#6641)
+
+  [ Devon ]
+  * Make image format reflection easier (#6550)
+
+  [ Sam Estep ]
+  * Delete unused Dockerfile (#6629)
+
+  [ cheneym2 ]
+  * Add -dump-module command to slangc (#6638)
+
+  [ Sam Estep ]
+  * Add Nix flake for direnv (#6635)
+
+  [ Gangzheng Tong ]
+  * Correct modifier isConst initialization (#6645)
+
+  [ Jay Kwak ]
+  * Add MinSizeRel to CMake preset (#6644)
+
+  [ Darren Wihandi ]
+  * Apply pixel interlock execution mode to entry-point functions only (#6661)
+  * Emit errors for missing returns on unsupported targets (#6633)
+
+  [ Dario Mylonopoulos ]
+  * Support spirv ops added by multiple extensions (#6615)
+
+  [ DarrelFW321 ]
+  * Add GLSL array length syntax support (#6665)
+
+  [ Darren Wihandi ]
+  * Add debugPrintfEXT support (#6659)
+
+  [ Yong He ]
+  * Don't load cached builtin module in slang-bootstrap. (#6667)
+
+  [ Sai Praveen Bangaru ]
+  * Improve embed tool to search all include directories as determined by CMake (#6675)
+
+  [ kaizhangNV ]
+  * Fix issue in peepholeOptimize (#6543)
+
+  [ Gangzheng Tong ]
+  * Fix mul operator followed by global scope (#6686)
+
+  [ Pavel Asyutchenko ]
+  * Fix SPV_KHR_maximal_reconvergence extension name spelling (#6687)
+
+  [ kaizhangNV ]
+  * Eliminate empty struct on metal target (#6603)
+  * findAndValidateEntryPoint should return null on failing (#6695)
+
+  [ Gangzheng Tong ]
+  * Ignore failure to fetch webgpu_dawn and slang-tint (#6689)
+
+  [ Ben-Fields ]
+  * [docs] Admonish slangc entry points / shader attributes (#6033)
+
+  [ aidanfnv ]
+  * Update CONTRIBUTING License from MIT to Apache 2.0 (#6673)
+
+  [ Jay Kwak ]
+  * Revert "Eliminate empty struct on metal target (#6603)" (#6711)
+
+  [ Darren Wihandi ]
+  * Fix compilation of global builtin variables inside generics (#6701)
+
+  [ Jay Kwak ]
+  * Make IRWitnessTable HOISTABLE (#6417)
+
+  [ Sruthik P ]
+  * Update hyperlinks in User Guide's Reference section (#6715)
+
+  [ Mukund Keshava ]
+  * Add GetDimensions support for CUDA (#6718)
+
+  [ Jay Kwak ]
+  * Use coopvec supporting dxcompiler.dll and dxil.dll (#6719)
+  * Fix the broken workflow for linux/release/gcc/wasm (#6730)
+
+  [ kaizhangNV ]
+  * re-enable macos test (#6731)
+
+  [ FrostyLeaves ]
+  * fix: Export slangTargets.cmake (#6679)
+
+  [ jarcherNV ]
+  * Use correct syntax for WGSL array transpiling (#6693)
+
+  [ Jay Kwak ]
+  * Enable "-HV 2021" option for DXC (#6445)
+
+  [ kaizhangNV ]
+  * Metal remove void field (#6725)
+
+  [ Jay Kwak ]
+  * Enable coopvec tests with dxc backend (#6726)
+
+  [ Ronan ]
+  * Fixed generic interface specialization crashes (#6601): (#6688)
+
+  [ kaizhangNV ]
+  * Implement parameter block to slang-gfx for Metal backend (#6577)
+
+  [ DarrelFW321 ]
+  * Add sparse texture Load intrinsic for SPIRV (#6702)
+
+  [ Harsh Aggarwal (NVIDIA) ]
+  * fix(d3d11): correct parameter in VSSetConstantBuffers1 from uavCount … (#6690)
+
+  [ Ellie Hermaszewska ]
+  * Do no fail on missing no_diff annotation on non-differentiable (inputs and output) function outputs (#6737)
+
+  [ Sai Praveen Bangaru ]
+  * Add a loop analysis step to infer the exit values of loop phi parameters. (#6696)
+
+  [ Darren Wihandi ]
+  * Implement subgroup quad operations for Metal (#6745)
+  * Fix crash when using GLSL global uniforms and varying inputs/ouputs together (#6651)
+
+  [ Julius Ikkala ]
+  * Add defer statement (#6619)
+
+  [ Harsh Aggarwal (NVIDIA) ]
+  * Support for Payload Access Qualifiers (#3448) (#6595)
+
+  [ Gangzheng Tong ]
+  * Use GITHUB_TOKEN for fetching prebuilt (#6712)
+
+  [ aidanfnv ]
+  * Return non-escaped strings from user-defined attributes (#6735)
+
+  [ Ellie Hermaszewska ]
+  * warn when the user puts a file extension in an implementing directive (#6757)
+
+  [ kaizhangNV ]
+  * void field rework (#6739)
+
+  [ Gangzheng Tong ]
+  * Get real value for typeAdapter (#6762)
+
+  [ Julius Ikkala ]
+  * Fix downstream compiler locale (#6734)
+
+  [ sricker-nvidia ]
+  * Add a workflow for auto labeling issues (#6776)
+
+  [ Julius Ikkala ]
+  * Add a more specific diagnostic message when passing concrete value to interface-typed output parameter (#6788)
+
+  [ jarcherNV ]
+  * Add flag to hoist instructions (#6740)
+
+  [ Gangzheng Tong ]
+  * Fix user-guide typos (#6789)
+  * Fix benchmark/compile.py nested f-string and deprecated constant issues (#6773)
+
+  [ aidanfnv ]
+  * Add slang-test check for D3D11 double support (#6761)
+
+  [ Darren Wihandi ]
+  * Fix pointer field/member access for GLSL (#6798)
+
+  [ Julius Ikkala ]
+  * Add SV_PointCoord to match gl_PointCoord (#6795)
+
+  [ Devon ]
+  * Fix User Attribute string reflection (#6799)
+
+  [ Simon Kallweit ]
+  * try to find cuda headers in /usr/include (#6800)
+
+  [ Darren Wihandi ]
+  * Fix matrix division by scalar for Metal and WGSL targets (#6752)
+
+  [ sricker-nvidia ]
+  * Update the access tokens used for auto labeling CI (#6811)
+
+  [ Yong He ]
+  * Consume `;` after parsing typedef decl. (#6759)
+
+  [ Jay Kwak ]
+  * Document CoopVec functions (#6777)
+
+  [ Darren Wihandi ]
+  * Add cooperative matrix 1 support (#6565)
+
+  [ Jay Kwak ]
+  * Use the latest Ubuntu version not specific old version (#6825)
+
+  [ Theresa Foley ]
+  * Remove support for ad hoc Slang IR compression (#6834)
+
+  [ Jay Kwak ]
+  * Skip cooperative vector tests when the graphics driver doesn't support it (#6841)
+
+  [ Darren Wihandi ]
+  * Fix SV_InstanceID for emit-spirv-via-glsl path (#6848)
+
+  [ Jay Kwak ]
+  * Fix compiler warning with clang 18.1.8 on windows (#6843)
+
+  [ Theresa Foley ]
+  * Eliminate back-reference in ChildStmt (#6835)
+  * Add Yet Another Source Code Generator (#6844)
+
+  [ kaizhangNV ]
+  * Fix regression in partial specialization of existential arguments (#6818)
+
+  [ Jay Kwak ]
+  * Copy slang-glsl-module.dll for vk-cts test (#6855)
+
+  [ Ronan ]
+  * Fixed crash in slang-ir-autodiff-loop-analysis.cpp (#6831)
+
+  [ Jay Kwak ]
+  * Check the available VK extensions before using CoopVec APIs in GFX (#6849)
+  * Fix compiler warning on Windows about -build-id (#6857)
+  * Document matrix multiplication operators (#6852)
+
+  [ sricker-nvidia ]
+  * Implement 64bit countbits intrinsic (#6433) (#6845)
+
+  [ Julius Ikkala ]
+  * Allow simplifying self-referential Phi parameters (#6870)
+
+  [ Darren Wihandi ]
+  * Fix quad control required SPIRV version for emit-spirv-via-glsl (#6869)
+  * Add `vk::offset` to specify member offsets for push constants (#6797)
+
+  [ Jay Kwak ]
+  * Add a new SM profile 6.9 (#6879)
+
+  [ James0124 ]
+  * Add SLANG_OVERRIDE to SLANG_IUNKNOWN_ macros (#6864)
+
+  [ Darren Wihandi ]
+  * Implement shader subgroup rotate intrinsics (#6878)
+
+  [ Theresa Foley ]
+  * A new approach to AST serialization (#6854)
+
+  [ AlexisPollonni ]
+  * Fixed various queryInterface implementations (#6863)
+
+  [ Harsh Aggarwal (NVIDIA) ]
+  * Fix #6544: Properly format nested type names in extensions (#6769)
+
+  [ Simon Kallweit ]
+  * update slang-rhi (#6587)
+  * disable slang-rhi cmake install (#6900)
+
+  [ Theresa Foley ]
+  * Fix attempt to construct an abstract AST node (#6905)
+
+  [ James0124 ]
+  * Stop using `chmod` on Windows host to fix build targeting Android (#6865)
+
+  [ Sai Praveen Bangaru ]
+  * Handle case where either side of a conditional branch is empty (#6890)
+
+  [ Ronan ]
+  * Implemented #pragma warning (#6748)
+
+  [ Jay Kwak ]
+  * Add MinSizeRel to cmake default preset explicitly (#6872)
+
+  [ Gangzheng Tong ]
+  * Update spirv-tools to for SDK v2025.2 (#6893)
+
+  [ John Zupin ]
+  * packaging: debian: update patches
+
+ -- john <john@odin>  Tue, 29 Apr 2025 11:56:18 -0600
+
 slang (2025.6.1~rc1-1lunarg22.04-1) jammy; urgency=medium
 
   [ Ellie Hermaszewska ]
