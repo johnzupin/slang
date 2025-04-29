@@ -7,10 +7,10 @@ Subject: patch: update include path to include/slang
  1 file changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 5da3826..78e3e8c 100644
+index 1e5d1d1..31f8807 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -360,8 +360,8 @@ install(
+@@ -429,8 +429,8 @@ install(
      PATTERN ".*" EXCLUDE
  )
  install(
