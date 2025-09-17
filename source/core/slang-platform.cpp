@@ -21,6 +21,7 @@
 
 #if SLANG_LINUX_FAMILY
 #include <unistd.h>
+#include <limits.h>
 #endif
 
 namespace Slang
