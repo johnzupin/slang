@@ -20,8 +20,8 @@
 #endif
 
 #if SLANG_LINUX_FAMILY
-#include <unistd.h>
 #include <limits.h>
+#include <unistd.h>
 #endif
 
 namespace Slang
